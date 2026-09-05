@@ -1,6 +1,19 @@
 # YouBike 30 分鐘缺車風險：可攜推論包
 
-這個 Repository 已包含在另一台 Windows 筆電重現 Demo 所需的凍結模型、六月特徵、站點座標、門檻、機率校正設定及核對資料。正常 Demo 不需要 1～6 月原始 CSV，也不需要重新訓練。
+這個 Repository 已包含在另一台 Windows 筆電重現 Demo 所需的互動前端、本機 API、凍結模型、六月特徵、站點座標、門檻、機率校正設定及核對資料。正常 Demo 不需要 1～6 月原始 CSV，也不需要重新訓練。
+
+## 作品現在能做什麼
+
+官方地圖已能顯示「現在是否0車」；本作品在站點已亮紅燈時，預測它30分鐘後是否仍為0車。互動 Demo 會：
+
+- 以真實六月歷史情境執行 LightGBM 推論，不使用前端寫死分數。
+- 顯示全部當下0車候選，並標出因歷史長度不足而未評分的站。
+- 先套凍結門檻，再取最多10站的有限行動清單；不會硬湊名額。
+- 依風險與相鄰距離產生巡補順序示意，並清楚標示它不是實際派車最佳化。
+- 按下揭曉後才讀六月答案，逐站顯示「仍為0車／已恢復有車」及本案例 Precision。
+- 在支援 WebMCP 的瀏覽器中，AI 助理也能操作同一套「執行預測／揭曉結果」流程。
+
+API 契約見 [docs/api-contract.md](docs/api-contract.md)，一分鐘展示流程見 [docs/demo-runbook.md](docs/demo-runbook.md)。
 
 ## 從資料分析走到最終問題
 
@@ -8,16 +21,21 @@
 
 ## 第一次使用（Windows PowerShell）
 
-先安裝 64-bit Python 3.12，Clone 後在專案根目錄執行：
+先安裝 64-bit Python 3.12、Node.js 22.13 以上與 Git。Clone 後在專案根目錄執行：
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
 .\scripts\setup.ps1
+.\scripts\setup-frontend.ps1
 .\scripts\smoke-test.ps1
-.\scripts\run-demo.ps1
+.\scripts\start-local-app.ps1
 ```
 
-Smoke test 會驗證模型與資料檔雜湊、9 筆門檻兩側 golden cases、未知站點，以及六月 27,962 筆有效決策的完整重算。成功後才建議開始展示。
+瀏覽器開啟 `http://localhost:3000` 即可操作。最後一個指令會同時啟動前端與本機模型服務，按 `Ctrl+C` 會一起停止。
+
+Smoke test 會驗證模型與資料檔雜湊、9筆門檻兩側 golden cases、未知站點，以及六月27,962筆有效決策的完整重算。成功後才建議開始展示。
+
+只想在終端查看模型時，仍可使用原本的 `scripts\run-demo.ps1`。
 
 ## 查詢指定時間、行政區與 Top-N
 
@@ -48,13 +66,15 @@ config/protocol_frozen_before_june.json
   六月開封前凍結的類別 schema 與實驗協議。
 data/source/dynamic_red_empty_2026_06.parquet
   六月封存特徵快取；含 92,882 筆候選快照。
+data/source/dynamic_red_empty_2026_06_input.parquet
+  前端 API 專用輸入；已物理移除答案與未來資訊欄位。
 data/reference/june_all_eligible_decisions.parquet
   27,962 筆一次性六月核對結果，只供測試與揭曉。
 data/stations/dim_station.csv
   站名、行政區、經緯度與容量範圍。
 ```
 
-`MANIFEST.json` 記錄每個必要檔案的大小、SHA256 與用途；測試會在啟動前逐一核對，避免搬電腦時遺漏或拿錯版本。
+`MANIFEST.json` 記錄核心推論資產的大小、SHA256 與用途；測試會在啟動前逐一核對，避免搬電腦時遺漏或拿錯版本。前端套件版本則由 `frontend/pnpm-lock.yaml` 固定。
 
 ## 推論公式與防洩漏
 
@@ -71,8 +91,8 @@ data/stations/dim_station.csv
 
 ## GitHub 應放與不應放的內容
 
-本專案內的模型、兩份 JSON、兩份 Parquet、站點 CSV，以及 `analysis/reports/` 中挑選過的彙整報告都應提交。不要提交 `.venv`、`node_modules`、AWS 金鑰、真正的 `.env`、大型原始 CSV、`tmp` 或未整理的舊實驗輸出。比賽前請在實際筆電全新 Clone 一次並跑 smoke test，另將 Repository ZIP 備份到 OneDrive。
+本專案內的前後端程式、模型、兩份 JSON、兩份 Parquet、站點 CSV，以及 `analysis/reports/` 中挑選過的彙整報告都應提交。不要提交 `.venv`、`node_modules`、AWS 金鑰、真正的 `.env`、大型原始 CSV、`tmp` 或未整理的舊實驗輸出。比賽前請在實際筆電全新 Clone 一次並跑 smoke test，另將 Repository ZIP 備份到 OneDrive。
 
 ## AWS 串接邊界
 
-未串 AWS 時，本包已可離線完整推論。之後可將 `FrozenYouBikeModel.predict_frame()` 包進 Lambda／SageMaker API；AWS 只負責部署、權限、儲存與 API，不應改動 68 欄順序、校正參數或門檻。
+未串 AWS 時，本包已可離線完整推論與操作前端。之後可把 `backend/api.py` 包成 Lambda 容器映像或 SageMaker Endpoint、把模型輸入與揭曉答案分開存進 S3，再用 API Gateway 接既有前端；AWS 只替換部署、權限、儲存與 API 位置，不應改動68欄順序、校正參數或門檻。正式前端網域須加入 `UBIKE_ALLOWED_ORIGINS` 白名單。

@@ -7,14 +7,14 @@
   "files": [
     {
       "path": ".env.example",
-      "bytes": 348,
-      "sha256": "40ead64b1bd404a35316e9ef17f2cfb88e7194d9013b555f6310f22f10295dcc",
+      "bytes": 558,
+      "sha256": "e024e189be2a47b6e96a80c82924cf4832abc4b3ede659ea793ea40832a4d21d",
       "purpose": "Safe repository-relative path configuration template; contains no credentials."
     },
     {
       "path": ".gitignore",
-      "bytes": 381,
-      "sha256": "ccce4f46d2d83f2b882815a1b480c1892f678f3874a3f1e033ddd4d2714f52d8",
+      "bytes": 390,
+      "sha256": "ba271a48297e5d80ac4f4d718f34a5d3805f67ff4e753414f054d7f9b835b3cc",
       "purpose": "Excludes secrets, virtual environments, dependencies, raw CSV and old experiments."
     },
     {
@@ -54,6 +54,12 @@
       "purpose": "Sealed June feature cache with 92,882 candidate empty-station snapshots."
     },
     {
+      "path": "data/source/dynamic_red_empty_2026_06_input.parquet",
+      "bytes": 2861200,
+      "sha256": "b1cb8fdffb1832b0d588bd5d821625cc92f8806d190b15dd5648e36f267af009",
+      "purpose": "Truth-free June API input with audit outcomes and future columns physically removed."
+    },
+    {
       "path": "data/stations/dim_station.csv",
       "bytes": 193983,
       "sha256": "2ea9d705da0d3508fd7e89009398b8b272188937c1e5f7209d0748cb1998d81f",
@@ -73,8 +79,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 4022,
-      "sha256": "6aab2582cb52098903a2a5e78f27982ca87329b741bbbeedf0866db8dd5a2a7c",
+      "bytes": 5605,
+      "sha256": "0dc0efcd9a365cc5dc487bd9eb885822f894a8e28ceaa16dfa32ec816078f99c",
       "purpose": "Traditional Chinese setup, testing, CLI, data-boundary and AWS handoff guide."
     },
     {

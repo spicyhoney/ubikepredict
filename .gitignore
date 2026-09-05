@@ -21,10 +21,10 @@ A_交通局-資料集/
 tmp/
 outputs/
 *.log
+.runtime/
 
 # Editors and operating systems
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
-
