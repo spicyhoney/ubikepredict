@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "bundle": "ubikepredict-frozen-june-demo",
+  "generated_at": "2026-09-05T00:00:00+08:00",
+  "self_hash": null,
+  "self_hash_note": "MANIFEST.json excludes itself because embedding its own SHA256 would be recursive.",
+  "files": [
+    {
+      "path": ".env.example",
+      "bytes": 348,
+      "sha256": "40ead64b1bd404a35316e9ef17f2cfb88e7194d9013b555f6310f22f10295dcc",
+      "purpose": "Safe repository-relative path configuration template; contains no credentials."
+    },
+    {
+      "path": ".gitignore",
+      "bytes": 381,
+      "sha256": "ccce4f46d2d83f2b882815a1b480c1892f678f3874a3f1e033ddd4d2714f52d8",
+      "purpose": "Excludes secrets, virtual environments, dependencies, raw CSV and old experiments."
+    },
+    {
+      "path": "backend/__init__.py",
+      "bytes": 56,
+      "sha256": "42efcc5a71494f343b1ab7bc04b559d890ccd03f0294da3db319c2985743fd33",
+      "purpose": "Marks the standalone inference package."
+    },
+    {
+      "path": "backend/inference.py",
+      "bytes": 11549,
+      "sha256": "80605bdf26f61bb6ba607d5eb124f9f66871196c50c05cc4070585009d71676b",
+      "purpose": "Exact 68-feature LightGBM, Platt calibration, frozen thresholds and CLI inference."
+    },
+    {
+      "path": "config/final_policy_freeze_before_may.json",
+      "bytes": 9282,
+      "sha256": "fef97defc8935a499831f12f1f42dd9d153b1075b61c50f3b57219c0bbccc714",
+      "purpose": "Frozen feature order, calibration parameters and policy thresholds."
+    },
+    {
+      "path": "config/protocol_frozen_before_june.json",
+      "bytes": 27099,
+      "sha256": "a65243c5ff986f57b0fb53f26a7649ccbc130a74765890788fe6196640c9825b",
+      "purpose": "Pre-June protocol and categorical schemas used for reproducible inference."
+    },
+    {
+      "path": "data/reference/june_all_eligible_decisions.parquet",
+      "bytes": 500714,
+      "sha256": "5f725b36965e41026679772dd60d79734e939b7a17025b6623f8385727660385",
+      "purpose": "Frozen June predictions and outcomes used only for parity testing and reveal."
+    },
+    {
+      "path": "data/source/dynamic_red_empty_2026_06.parquet",
+      "bytes": 2883186,
+      "sha256": "31b23f18c04d86f917932720158104ad66ceaa78273f39aa95246c343773cfea",
+      "purpose": "Sealed June feature cache with 92,882 candidate empty-station snapshots."
+    },
+    {
+      "path": "data/stations/dim_station.csv",
+      "bytes": 193983,
+      "sha256": "2ea9d705da0d3508fd7e89009398b8b272188937c1e5f7209d0748cb1998d81f",
+      "purpose": "Station names, districts, coordinates and capacity ranges for display."
+    },
+    {
+      "path": "docs/model-card.md",
+      "bytes": 1436,
+      "sha256": "99fdffd576f5cb9172eec45b59e8465d6137ab8016d7d71b6c6b6d942ca7b550",
+      "purpose": "Model scope, frozen policy, provenance, limitations and leakage controls."
+    },
+    {
+      "path": "model/lgbm_full.txt",
+      "bytes": 1237897,
+      "sha256": "d2e8ce0738caa0544531d4ac880bab8c1983fbf52686683631cb65475b5d5cf8",
+      "purpose": "Frozen v2 full LightGBM model with 242 trees and 68 ordered features."
+    },
+    {
+      "path": "README.md",
+      "bytes": 3516,
+      "sha256": "6e4d46a2074c3d561ae74e7d9370ade7b7dd601eb486e9e2453357fb4bd62ce0",
+      "purpose": "Traditional Chinese setup, testing, CLI, data-boundary and AWS handoff guide."
+    },
+    {
+      "path": "requirements.txt",
+      "bytes": 60,
+      "sha256": "c5890e418c67e0b541b9cecc3560c8faf0e1756a23c71626e60639d4287cb27d",
+      "purpose": "Pinned Python runtime dependencies used by the verified local environment."
+    },
+    {
+      "path": "scripts/run-demo.ps1",
+      "bytes": 762,
+      "sha256": "ce756f633513235dd23e9ee2f731e81714c08301a7ab8579007638c43d409d97",
+      "purpose": "One-command time, district, policy and Top-N demo runner."
+    },
+    {
+      "path": "scripts/setup.ps1",
+      "bytes": 883,
+      "sha256": "698dac854a49f9b4c755baf61f6862a38e130cefacd46c4ff360851e8cf3cf33",
+      "purpose": "Creates a local Python environment and installs pinned dependencies."
+    },
+    {
+      "path": "scripts/smoke-test.ps1",
+      "bytes": 362,
+      "sha256": "1f8f2e82535805d9c4aba07b5a47314b4f05a3812c5a2780eb24e87000620ec6",
+      "purpose": "One-command portable-bundle verification."
+    },
+    {
+      "path": "tests/smoke_test.py",
+      "bytes": 5215,
+      "sha256": "3a4d7a3ba5710a850ec939d3423524a8cdbed611e87b332b7801c76bc971bbb3",
+      "purpose": "Manifest, leakage, nine-row golden, unknown-category and full parity tests."
+    }
+  ]
+}

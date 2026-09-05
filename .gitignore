@@ -1,0 +1,30 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local settings and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Frontend/build artifacts (if added later)
+node_modules/
+dist/
+build/
+
+# Large raw/research artifacts are intentionally outside this repository
+A_交通局-資料集/
+tmp/
+outputs/
+*.log
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
