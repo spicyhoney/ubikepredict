@@ -1,0 +1,15 @@
+# Keep manifest-verified files byte-stable across Windows and Unix clones.
+.gitattributes text eol=lf
+.env.example text eol=lf
+.gitignore text eol=lf
+*.md text eol=lf
+*.py text eol=lf
+*.ps1 text eol=lf
+requirements.txt text eol=lf
+
+*.json text eol=crlf
+*.csv text eol=crlf
+model/*.txt text eol=crlf
+
+*.parquet binary
+*.xlsx binary

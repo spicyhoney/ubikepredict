@@ -2,6 +2,10 @@
 
 這個 Repository 已包含在另一台 Windows 筆電重現 Demo 所需的凍結模型、六月特徵、站點座標、門檻、機率校正設定及核對資料。正常 Demo 不需要 1～6 月原始 CSV，也不需要重新訓練。
 
+## 從資料分析走到最終問題
+
+專案不是先選模型再找用途，而是先分析失衡時段、事件持續時間、重要站定義與既有介入痕跡，再逐步測試逐快照風險、門檻、Top-K 與加權標籤。完整的 10 份 Excel 證據與各階段決策整理在 [分析歷程](analysis/README.md)。這些工作簿保留探索過程；目前實作與最終數字仍以本頁及 [模型卡](docs/model-card.md) 為準。
+
 ## 第一次使用（Windows PowerShell）
 
 先安裝 64-bit Python 3.12，Clone 後在專案根目錄執行：
@@ -67,9 +71,8 @@ data/stations/dim_station.csv
 
 ## GitHub 應放與不應放的內容
 
-本專案內的模型、兩份 JSON、兩份 Parquet 與站點 CSV 都應提交，總量很小。不要提交 `.venv`、`node_modules`、AWS 金鑰、真正的 `.env`、1 GB 原始 CSV、`tmp` 或舊實驗輸出。比賽前請在實際筆電全新 Clone 一次並跑 smoke test，另將 Repository ZIP 備份到 USB。
+本專案內的模型、兩份 JSON、兩份 Parquet、站點 CSV，以及 `analysis/reports/` 中挑選過的彙整報告都應提交。不要提交 `.venv`、`node_modules`、AWS 金鑰、真正的 `.env`、大型原始 CSV、`tmp` 或未整理的舊實驗輸出。比賽前請在實際筆電全新 Clone 一次並跑 smoke test，另將 Repository ZIP 備份到 OneDrive。
 
 ## AWS 串接邊界
 
 未串 AWS 時，本包已可離線完整推論。之後可將 `FrozenYouBikeModel.predict_frame()` 包進 Lambda／SageMaker API；AWS 只負責部署、權限、儲存與 API，不應改動 68 欄順序、校正參數或門檻。
-
