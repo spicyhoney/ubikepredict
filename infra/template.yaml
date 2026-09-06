@@ -1,0 +1,460 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: YouBike persistent-empty prediction demo (private S3, Lambda containers, HTTP API, Amplify)
+
+Parameters:
+  StageName:
+    Type: String
+    Default: prod
+    AllowedPattern: "^[A-Za-z0-9_-]+$"
+  ReleaseId:
+    Type: String
+    Default: frozen-v1
+    AllowedPattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+  FrontendBranchName:
+    Type: String
+    Default: main
+    AllowedPattern: "^[A-Za-z0-9-]+$"
+  FrontendOriginOverride:
+    Type: String
+    Default: ""
+    Description: Optional exact HTTPS origin when hosting the frontend outside this stack's Amplify app.
+    AllowedPattern: "^$|^https://[^/]+$"
+  LocalDevelopmentOrigin:
+    Type: String
+    Default: http://localhost:3000
+    AllowedPattern: "^https?://[^/]+$"
+  BedrockEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+  BedrockModelId:
+    Type: String
+    Default: ""
+    Description: Model ID or inference-profile ID made available by the competition account.
+  BedrockModelResourceArns:
+    Type: CommaDelimitedList
+    Default: ""
+    Description: Exact Bedrock resources allowed by the prediction role. For a cross-Region profile include its ARN and every required destination or global foundation-model ARN from AWS guidance.
+  BedrockRegion:
+    Type: String
+    Default: ""
+    Description: Optional cross-region Bedrock region. Empty means the Lambda execution region.
+    AllowedPattern: "^$|^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$"
+  BedrockTimeoutSeconds:
+    Type: Number
+    Default: 6
+    MinValue: 1
+    MaxValue: 15
+  S3TimeoutSeconds:
+    Type: Number
+    Default: 8
+    MinValue: 1
+    MaxValue: 15
+  PredictionMemorySize:
+    Type: Number
+    Default: 4096
+    MinValue: 1024
+    MaxValue: 10240
+  RevealMemorySize:
+    Type: Number
+    Default: 1536
+    MinValue: 512
+    MaxValue: 10240
+  LambdaTimeoutSeconds:
+    Type: Number
+    Default: 25
+    MinValue: 5
+    MaxValue: 28
+  LogRetentionDays:
+    Type: Number
+    Default: 7
+    AllowedValues: [1, 3, 5, 7, 14, 30]
+  ApiThrottleRateLimit:
+    Type: Number
+    Default: 3
+    MinValue: 1
+    MaxValue: 20
+  ApiThrottleBurstLimit:
+    Type: Number
+    Default: 10
+    MinValue: 1
+    MaxValue: 50
+  ExplainThrottleRateLimit:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    MaxValue: 10
+  ExplainThrottleBurstLimit:
+    Type: Number
+    Default: 2
+    MinValue: 1
+    MaxValue: 20
+
+Rules:
+  BedrockParametersRequiredWhenEnabled:
+    RuleCondition: !Equals [!Ref BedrockEnabled, "true"]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref BedrockModelId, ""]]
+        AssertDescription: BedrockModelId is required when BedrockEnabled is true.
+      - Assert:
+          Fn::Not:
+            - Fn::Equals:
+                - Fn::Join:
+                    - ","
+                    - Ref: BedrockModelResourceArns
+                - ""
+        AssertDescription: BedrockModelResourceArns is required when BedrockEnabled is true.
+
+Conditions:
+  UseBedrock: !Equals [!Ref BedrockEnabled, "true"]
+  HasFrontendOriginOverride: !Not [!Equals [!Ref FrontendOriginOverride, ""]]
+
+Globals:
+  Function:
+    Architectures: [x86_64]
+    Timeout: !Ref LambdaTimeoutSeconds
+    EphemeralStorage:
+      Size: 2048
+    Environment:
+      Variables:
+        UBIKE_RELEASE_ID: !Ref ReleaseId
+        UBIKE_S3_TIMEOUT_SECONDS: !Sub "${S3TimeoutSeconds}"
+        UBIKE_ALLOWED_ORIGINS: !If
+          - HasFrontendOriginOverride
+          - !Sub "https://${FrontendBranchName}.${FrontendApp.DefaultDomain},${LocalDevelopmentOrigin},${FrontendOriginOverride}"
+          - !Sub "https://${FrontendBranchName}.${FrontendApp.DefaultDomain},${LocalDevelopmentOrigin}"
+
+Resources:
+  RuntimeBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Project
+          Value: ubikepredict
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: StackName
+          Value: !Ref AWS::StackName
+        - Key: DataClass
+          Value: runtime-no-truth
+
+  RuntimeBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref RuntimeBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !Sub "arn:${AWS::Partition}:s3:::${RuntimeBucket}"
+              - !Sub "arn:${AWS::Partition}:s3:::${RuntimeBucket}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  TruthBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Project
+          Value: ubikepredict
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: StackName
+          Value: !Ref AWS::StackName
+        - Key: DataClass
+          Value: held-out-truth
+
+  TruthBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref TruthBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !Sub "arn:${AWS::Partition}:s3:::${TruthBucket}"
+              - !Sub "arn:${AWS::Partition}:s3:::${TruthBucket}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  FrontendApp:
+    Type: AWS::Amplify::App
+    Properties:
+      Name: !Sub "${AWS::StackName}-frontend"
+      Platform: WEB
+      CustomRules:
+        - Source: '</^[^.]+$|\.(?!(css|gif|ico|jpg|jpeg|js|json|map|png|rsc|svg|ttf|txt|woff|woff2)$)([^.]+$)/>'
+          Target: /index.html
+          Status: "200"
+      Tags:
+        - Key: Project
+          Value: ubikepredict
+        - Key: StackName
+          Value: !Ref AWS::StackName
+
+  FrontendBranch:
+    Type: AWS::Amplify::Branch
+    Properties:
+      AppId: !GetAtt FrontendApp.AppId
+      BranchName: !Ref FrontendBranchName
+      EnableAutoBuild: false
+      Stage: PRODUCTION
+      Tags:
+        - Key: Project
+          Value: ubikepredict
+        - Key: StackName
+          Value: !Ref AWS::StackName
+
+  HttpApiAccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    Properties:
+      LogGroupName: !Sub "/aws/http-api/${AWS::StackName}"
+      RetentionInDays: !Ref LogRetentionDays
+
+  PublicHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref StageName
+      CorsConfiguration:
+        AllowOrigins:
+          - !Sub "https://${FrontendBranchName}.${FrontendApp.DefaultDomain}"
+          - !Ref LocalDevelopmentOrigin
+          - !If [HasFrontendOriginOverride, !Ref FrontendOriginOverride, !Ref AWS::NoValue]
+        AllowMethods: [GET, POST, OPTIONS]
+        AllowHeaders: [content-type, authorization]
+        AllowCredentials: false
+        MaxAge: "600"
+      AccessLogSettings:
+        DestinationArn: !GetAtt HttpApiAccessLogGroup.Arn
+        Format: '{"requestId":"$context.requestId","routeKey":"$context.routeKey","status":"$context.status","responseLength":"$context.responseLength","integrationLatency":"$context.integrationLatency"}'
+      DefaultRouteSettings:
+        DetailedMetricsEnabled: true
+        ThrottlingRateLimit: !Ref ApiThrottleRateLimit
+        ThrottlingBurstLimit: !Ref ApiThrottleBurstLimit
+      RouteSettings:
+        "POST /api/explain":
+          DetailedMetricsEnabled: true
+          ThrottlingRateLimit: !Ref ExplainThrottleRateLimit
+          ThrottlingBurstLimit: !Ref ExplainThrottleBurstLimit
+
+  PredictionExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: RuntimeAssetReadOnly
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:s3:::${RuntimeBucket}/releases/${ReleaseId}/model/lgbm_full.txt"
+                  - !Sub "arn:${AWS::Partition}:s3:::${RuntimeBucket}/releases/${ReleaseId}/config/final_policy_freeze_before_may.json"
+                  - !Sub "arn:${AWS::Partition}:s3:::${RuntimeBucket}/releases/${ReleaseId}/config/protocol_frozen_before_june.json"
+                  - !Sub "arn:${AWS::Partition}:s3:::${RuntimeBucket}/replays/2026-06/input/dynamic_red_empty_2026_06_input.parquet"
+                  - !Sub "arn:${AWS::Partition}:s3:::${RuntimeBucket}/stations/dim_station.csv"
+        - PolicyName: OwnLambdaLogs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-PredictionFunction-*:*"
+        - !If
+          - UseBedrock
+          - PolicyName: ExactBedrockModelInvoke
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action: bedrock:InvokeModel
+                  Resource: !Ref BedrockModelResourceArns
+          - !Ref AWS::NoValue
+
+  RevealExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: TruthObjectReadOnly
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${TruthBucket}/replays/2026-06/truth/june_all_eligible_decisions.parquet"
+        - PolicyName: OwnLambdaLogs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-RevealFunction-*:*"
+
+  PredictionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      Role: !GetAtt PredictionExecutionRole.Arn
+      MemorySize: !Ref PredictionMemorySize
+      ImageConfig:
+        Command: [backend.lambda_handler.prediction_handler]
+      Environment:
+        Variables:
+          UBIKE_RUNTIME_BUCKET: !Ref RuntimeBucket
+          BEDROCK_ENABLED: !Ref BedrockEnabled
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
+          BEDROCK_REGION: !Ref BedrockRegion
+          BEDROCK_TIMEOUT_SECONDS: !Sub "${BedrockTimeoutSeconds}"
+      Events:
+        Health:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PublicHttpApi
+            Path: /api/health
+            Method: GET
+            PayloadFormatVersion: "2.0"
+        Options:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PublicHttpApi
+            Path: /api/options
+            Method: GET
+            PayloadFormatVersion: "2.0"
+        Predict:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PublicHttpApi
+            Path: /api/predict
+            Method: POST
+            PayloadFormatVersion: "2.0"
+        Explain:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PublicHttpApi
+            Path: /api/explain
+            Method: POST
+            PayloadFormatVersion: "2.0"
+    Metadata:
+      DockerContext: ../
+      Dockerfile: Dockerfile.aws
+      DockerTag: prediction-v1
+
+  RevealFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      Role: !GetAtt RevealExecutionRole.Arn
+      MemorySize: !Ref RevealMemorySize
+      ImageConfig:
+        Command: [backend.lambda_handler.reveal_handler]
+      Environment:
+        Variables:
+          UBIKE_TRUTH_BUCKET: !Ref TruthBucket
+      Events:
+        Reveal:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PublicHttpApi
+            Path: /api/reveal
+            Method: POST
+            PayloadFormatVersion: "2.0"
+    Metadata:
+      DockerContext: ../
+      Dockerfile: Dockerfile.aws
+      DockerTag: reveal-v1
+
+  PredictionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${PredictionFunction}"
+      RetentionInDays: !Ref LogRetentionDays
+
+  RevealLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${RevealFunction}"
+      RetentionInDays: !Ref LogRetentionDays
+
+Outputs:
+  ApiBaseUrl:
+    Description: Public HTTP API base URL used at frontend build time.
+    Value: !Sub "https://${PublicHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}"
+  RuntimeBucketName:
+    Value: !Ref RuntimeBucket
+  TruthBucketName:
+    Value: !Ref TruthBucket
+  PredictionFunctionName:
+    Value: !Ref PredictionFunction
+  RevealFunctionName:
+    Value: !Ref RevealFunction
+  AmplifyAppId:
+    Value: !GetAtt FrontendApp.AppId
+  AmplifyBranchName:
+    Value: !Ref FrontendBranchName
+  FrontendUrl:
+    Description: Public static demo URL. It becomes usable after the first manual Amplify deployment.
+    Value: !Sub "https://${FrontendBranchName}.${FrontendApp.DefaultDomain}"

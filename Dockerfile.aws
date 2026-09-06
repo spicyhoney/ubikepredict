@@ -1,0 +1,16 @@
+FROM public.ecr.aws/lambda/python:3.12
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+COPY requirements.txt requirements-aws.txt ${LAMBDA_TASK_ROOT}/
+RUN python -m pip install --no-cache-dir \
+      --requirement ${LAMBDA_TASK_ROOT}/requirements-aws.txt \
+      --target ${LAMBDA_TASK_ROOT}
+
+COPY backend ${LAMBDA_TASK_ROOT}/backend
+COPY MANIFEST.json ${LAMBDA_TASK_ROOT}/MANIFEST.json
+
+# SAM overrides this command per function. Keeping a valid default makes the
+# image runnable directly for prediction-handler smoke tests.
+CMD ["backend.lambda_handler.prediction_handler"]

@@ -26,4 +26,4 @@ if ($LASTEXITCODE -ne 0) {
     throw "API tests failed."
 }
 
-Write-Host "Smoke test complete: 13 model/API tests passed."
+Write-Host "Smoke test complete: frozen-model and full API/Lambda suites passed."

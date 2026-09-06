@@ -22,6 +22,8 @@ tmp/
 outputs/
 *.log
 .runtime/
+.aws-sam/
+.aws-artifacts/
 
 # Editors and operating systems
 .idea/

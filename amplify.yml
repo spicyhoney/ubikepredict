@@ -1,0 +1,23 @@
+version: 1
+applications:
+  - appRoot: frontend
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - corepack enable
+            - corepack prepare pnpm@11.19.0 --activate
+            - pnpm install --frozen-lockfile
+        build:
+          commands:
+            - 'test -n "$NEXT_PUBLIC_API_BASE_URL" || (echo "NEXT_PUBLIC_API_BASE_URL is required" && exit 1)'
+            - 'case "$NEXT_PUBLIC_API_BASE_URL" in http://localhost*|http://127.0.0.1*) echo "Public build cannot use localhost API"; exit 1;; esac'
+            - pnpm run build
+            - test -f dist/client/index.html
+      artifacts:
+        baseDirectory: dist/client
+        files:
+          - "**/*"
+      cache:
+        paths:
+          - node_modules/**/*

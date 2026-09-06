@@ -11,6 +11,7 @@
 - 先套凍結門檻，再取最多10站的有限行動清單；不會硬湊名額。
 - 依風險與相鄰距離產生巡補順序示意，並清楚標示它不是實際派車最佳化。
 - 按下揭曉後才讀六月答案，逐站顯示「仍為0車／已恢復有車」及本案例 Precision。
+- 點選可評分站點可看 LightGBM SHAP 推升／降低風險因素；本機以固定範本摘要，AWS 模式才會在實際成功呼叫後標示 Amazon Bedrock。
 - 在支援 WebMCP 的瀏覽器中，AI 助理也能操作同一套「執行預測／揭曉結果」流程。
 
 API 契約見 [docs/api-contract.md](docs/api-contract.md)，一分鐘展示流程見 [docs/demo-runbook.md](docs/demo-runbook.md)。
@@ -41,7 +42,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 瀏覽器開啟 `http://localhost:3000` 即可操作。最後一個指令會同時啟動前端與本機模型服務，按 `Ctrl+C` 會一起停止。
 
-Smoke test 會驗證模型與資料檔雜湊、9筆門檻兩側 golden cases、未知站點，以及六月27,962筆有效決策的完整重算。成功後才建議開始展示。
+Smoke test 會驗證模型與資料檔雜湊、門檻兩側 golden cases、未知站點、六月完整 parity，以及本機 API、Lambda adapter、S3 雜湊防護、SHAP 與 Bedrock fallback。測試項目會隨實作擴充，請以最終實跑全套通過為準。
 
 只想在終端查看模型時，仍可使用原本的 `scripts\run-demo.ps1`。
 
@@ -57,7 +58,7 @@ Smoke test 會驗證模型與資料檔雜湊、9筆門檻兩側 golden cases、�
 - `strict`：校正機率至少 65.177727%，警示較少、要求較高。
 - `all`：不先套門檻，直接列出該篩選範圍風險最高的站點。
 
-也可直接呼叫 Python，輸出 JSON 給前端讀取：
+也可直接呼叫 Python，輸出 JSON 供離線檢視或其他工具使用；互動前端本身呼叫的是 `/api/*`，不是這個 CLI 檔案：
 
 ```powershell
 .\.venv\Scripts\python.exe .\backend\inference.py --datetime "2026-06-23 19:30" --district "板橋區" --policy all --top 10 --format json --output .\demo-output.json
@@ -99,10 +100,20 @@ data/stations/dim_station.csv
 
 ## GitHub 應放與不應放的內容
 
-本專案內的前後端程式、模型、兩份 JSON、兩份 Parquet、站點 CSV，以及 `analysis/reports/` 中挑選過的彙整報告都應提交。不要提交 `.venv`、`node_modules`、AWS 金鑰、真正的 `.env`、大型原始 CSV、`tmp` 或未整理的舊實驗輸出。比賽前請在實際筆電全新 Clone 一次並跑 smoke test，另將 Repository ZIP 備份到 OneDrive。
+本專案內的前後端程式、模型、兩份 JSON、三份 Parquet、站點 CSV，以及 `analysis/reports/` 中挑選過的彙整報告都應提交。不要提交 `.venv`、`node_modules`、AWS 金鑰、真正的 `.env`、大型原始 CSV、`tmp` 或未整理的舊實驗輸出。比賽前請在實際筆電全新 Clone 一次並跑 smoke test，另將 Repository ZIP 備份到 OneDrive。
 
-## AWS 串接邊界
+## AWS-ready 狀態：程式已備妥，尚未真正上雲
 
-未串 AWS 時，本包已可離線完整推論與操作前端。目前尚未完成 S3 loader、Lambda handler、API Gateway、SHAP、Bedrock client及AI摘要介面，不能把架構規劃說成已部署。
+未有 AWS 憑證時，本包仍可離線完整推論、解釋與操作前端。目前已寫好並可本機測試的是：
 
-比賽主路徑是「Amplify公開前端 → API Gateway HTTP API → 兩個權限分離的 Lambda 容器 → 私有S3；Prediction Lambda另呼叫Bedrock整理SHAP」，本機前後端只作開發與斷網備援。AWS只替換部署、權限、儲存與API位置，不得改動68欄順序、校正參數或門檻。完整步驟、環境變數、IAM與Definition of Done見 [AWS 現場交接](docs/aws-handoff.md)。
+- 靜態前端封裝與 Amplify manual deployment 流程。
+- API Gateway HTTP API、兩個 Lambda 容器、私有 runtime／truth S3 與最小權限 IAM 的 SAM 模板。
+- S3 冷啟動下載、固定檔名／大小／SHA256 核對，以及 API Gateway v2 Lambda handlers。
+- LightGBM `pred_contrib=True` 的 SHAP 原始分數貢獻、中文欄位名與受控 Bedrock 摘要；無權限、關閉、逾時或輸出不合規時會改用明確標示的固定範本。
+- 部署、前端封裝、雲端驗收、清理腳本與 GitHub Actions CI。
+
+目前沒有比賽 AWS 金鑰，因此尚未建立任何真實 AWS 資源、未在實際 Region 呼叫 Bedrock，也未完成公開 HTTPS 網址的 cloud parity 驗收。不可將「程式與部署骨架完成」報告成「AWS／Bedrock 已部署成功」。
+
+比賽主路徑是「Amplify manual static 公開前端 → API Gateway HTTP API → 兩個權限分離的 Lambda 容器 → 私有 S3；Prediction Lambda 另呼叫 Bedrock 整理 SHAP」。Prediction role 無權讀取 truth bucket，但 `reveal` 是為了演示回放而公開的 API，不能聲稱答案「外部完全取得不到」。
+
+現場只應剩下：取得短期 AWS 憑證，確認 Region 與 Bedrock model／inference profile 存取權，執行 `deploy-aws.ps1`，再完成腳本與人工雲端驗收。腳本會核對固定 API 案例、SHAP、Bedrock（啟用時）、Amplify 頁面與 CORS；IAM 的 truth `AccessDenied`、throttle、跨裝置操作及可選的 cloud/local parity 仍需依清單驗證。完整指令與 Definition of Done 見 [AWS 現場交接](docs/aws-handoff.md)。

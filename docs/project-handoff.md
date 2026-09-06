@@ -75,6 +75,11 @@ truth-free 六月輸入
 | data/source/dynamic_red_empty_2026_06.parquet | 離線 smoke/parity 稽核 | 含未來欄，只能私有 |
 | data/stations/dim_station.csv | 站名、行政區、座標、容量 | 供顯示及路線 |
 | MANIFEST.json | 核心推論資產的大小與 SHA256 | 不是整站供應鏈清單 |
+| backend/lambda_handler.py | API Gateway v2 的 Prediction／Reveal handlers | 兩個 Lambda 分開權限 |
+| backend/s3_assets.py | S3 allow-list 下載與大小／SHA256 核對 | 只在 AWS 模式需要 boto3 |
+| backend/explanations.py | LightGBM SHAP 貢獻與中文特徵顯示 | 加總必須重建 raw score |
+| backend/bedrock_summary.py | 受控 Bedrock 摘要與固定範本 fallback | 不得改機率、門檻或排名 |
+| infra/template.yaml | S3、兩 Lambda 容器、API Gateway、IAM、Amplify | 已寫好，尚未在真實 AWS 部署 |
 
 ## 六月凍結結果
 
@@ -102,23 +107,27 @@ Top-K 是營運清單上限，不是模型評分方式。先過機率門檻，�
 - 以實際經緯度畫站點並產生巡補順序示意。
 - 歷史結果揭曉及逐站命中數。
 - 本機 API、互動前端、WebMCP工具、CORS白名單。
-- Windows 一鍵安裝／啟動、13項 API/模型測試及27,962筆完整 parity。
+- LightGBM `pred_contrib=True` 的 SHAP 原始分數貢獻、完整特徵中文名、數值與推升／降低風險方向。
+- 受控 Bedrock Converse client、只能選 allow-listed SHAP feature IDs 的輸出驗證、伺服器組文及 template fallback。
+- 前端站點解釋／營運摘要面板、縮小地圖標記與密集編號視覺避讓。
+- S3 資產下載與雜湊核對、Prediction／Reveal Lambda handlers、Linux 容器、API Gateway／IAM／雙 S3／Amplify 的 SAM 模板。
+- 部署、靜態前端封裝、雲端驗收、安全清理腳本與 GitHub Actions CI。
+- Windows 一鍵安裝／啟動、全套 API／模型／Lambda／S3／SHAP／Bedrock 測試，及27,962筆完整 parity。測試數量以最終實跑為準，不再寫死項目數。
 
-## 尚未完成，不能假裝已完成
+## 尚未完成：只剩真實 AWS 憑證才能做的事
 
-- SHAP 貢獻計算與中文特徵名稱映射。
-- 前端「主要原因／AI營運摘要」面板。
-- Amazon Bedrock 呼叫、prompt、JSON驗證、快取及失敗 fallback。
-- S3下載器、Lambda handler／容器、API Gateway與IAM。
-- AWS上的端到端驗收，以及比賽必做的Amplify公開前端部署。
+- 尚未取得比賽短期 AWS 憑證。
+- 尚未確定實際 Region、該帳號可用的 Bedrock model／inference profile ID，以及 profile 與目的模型所需的精確 ARN 清單。
+- 尚未執行 `scripts/deploy-aws.ps1` 建立真實 AWS 資源、上傳資產及 Amplify manual static 前端。
+- 尚未在真實帳號驗收 Bedrock、Prediction role 無 truth 權限、CORS、公開 HTTPS Demo 與 cloud/local parity。
 
-## 前端上雲與視覺待辦
+## 前端上雲與視覺狀態
 
-- 目前Vinext production build可成功，但產物是server/Worker bundle，尚非可直接交給Amplify或S3的靜態網站。
-- Production build必須強制提供正式API URL，不可默默回退至 `http://127.0.0.1:8000`。
-- 地圖一般站點標記應縮小，只放大選取站；路線順位使用小型編號徽章。
-- 密集站點須加入編號避讓、分群或點擊展開，避免多個數字堆疊。
-- 根據行政區與Top-K路線自動調整地圖範圍；完整站名與原因留在清單／側欄顯示。
+- Vinext 已設為靜態匯出，`scripts/package-frontend.ps1` 可產生 Amplify manual deployment ZIP。
+- Production build 強制提供非 localhost 的 HTTPS `NEXT_PUBLIC_API_BASE_URL`，並掃描建置產物是否殘留 localhost API。
+- Windows 封裝腳本明確使用 `vinext.CMD`，並對已知 shutdown assertion 採受限容錯。
+- 地圖標記已縮小，密集行動站的路線編號會視覺避讓，點選站點可開啟 SHAP／營運摘要面板。
+- 尚未完成的是真實 Amplify 上傳、公開網址與跨裝置驗收，不是前端程式本身。
 
 SHAP 是原因來源；Bedrock只能整理已提供的 SHAP 與站點事實，不得自行發明原因、改風險分數、改門檻或決定清單。
 
@@ -131,6 +140,8 @@ SHAP 是原因來源；Bedrock只能整理已提供的 SHAP 與站點事實，�
 5. Bedrock不得看到六月答案，不得以生成內容取代模型計算。
 6. 不得把 data/ 直接公開成前端靜態目錄。
 7. 路線只是示意，不能宣稱為車隊最佳化或實際派車指令。
+8. Bedrock 僅能從 allow-listed SHAP feature IDs 選重點；只有真正呼叫成功時前端才能標示 Amazon Bedrock。
+9. AWS 的 `/api/reveal` 是公開 Demo endpoint；應宣稱的是 Prediction role 無權讀 truth，不是 truth 從外部完全無法取得。
 
 ## 新筆電首先執行
 
@@ -142,14 +153,15 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\scripts\start-local-app.ps1
 ~~~
 
-Smoke test 必須顯示27,962筆 parity 且最大機率差為0，之後才開始 AWS 修改。
+Smoke test 必須顯示27,962筆 parity，且最大機率差不超過 `2e-7`（目前凍結資產實跑為0），並完成當前全套 API／Lambda／S3／SHAP／Bedrock fallback 測試，之後才執行 AWS 部署。
 
 ## 給新 AI 對話的開場提示
 
 ~~~text
 請先完整閱讀 README.md、docs/project-handoff.md、docs/aws-handoff.md、
-docs/api-contract.md 與 docs/model-card.md，再檢查 git status。
+docs/api-contract.md 與 docs/model-card.md，再檢查 git status 與 GitHub Actions。
 這是已凍結的 YouBike 30分鐘持續缺車模型；不得重訓、不得使用6月調參，
-也不得改68欄順序、Platt參數或門檻。請從 docs/aws-handoff.md 的未完成清單
-繼續，完成一項就更新文件與測試，不要把規劃誤寫成已完成。
+也不得改68欄順序、Platt參數或門檻。AWS-ready 程式、SAM、容器、SHAP、
+Bedrock client/fallback、靜態前端與部署腳本已完成，但尚未實際上雲。取得比賽憑證後，
+依 docs/aws-handoff.md 確認Region與Bedrock權限，執行deploy及cloud verification。不要把AWS-ready誤寫成已部署。
 ~~~

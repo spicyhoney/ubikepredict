@@ -1,62 +1,50 @@
-# AWS 現場交接：S3、Lambda、API Gateway、SHAP、Bedrock
+# AWS 現場交接：只剩憑證、部署與雲端驗收
 
-這是比賽現場的實作清單，不是完成宣告。開始前先讀 [專案完整交接](project-handoff.md)。目前 Repository 已完成本機模型、API與前端；所有不需帳號的 AWS、SHAP及 Bedrock 程式應在賽前完成，現場只保留建立資源、部署與雲端驗收。
+這份文件是比賽現場的操作手冊。先讀 [專案完整交接](project-handoff.md)，再按本頁執行。
 
-## 建議只走這條主路
+## 先說清楚目前狀態
 
-依目前約1.24MB模型、2.86MB truth-free輸入及低頻 Demo 流量，第一版採：
+已完成並可在沒有 AWS 憑證的情況下測試：
+
+- 靜態 Vinext 前端與 Amplify manual deployment 封裝流程。
+- API Gateway HTTP API、兩個 Linux/amd64 Lambda 容器、兩個私有 S3 bucket、最小權限 IAM、CORS、CloudWatch logs 與 API throttle 的 SAM/CloudFormation 模板。
+- Prediction Lambda 的 S3 runtime 資產下載與大小／SHA256 核對；Reveal Lambda 另行讀取 truth。
+- API Gateway payload format 2.0 handlers，包含 `health`、`options`、`predict`、`explain`、`reveal`。
+- LightGBM `pred_contrib=True` 解釋、完整 68 特徵的中文名稱、受控 Bedrock Converse 摘要、輸出驗證與固定範本 fallback。
+- 前端 SHAP／營運摘要面板、地圖標記縮小與密集路線編號視覺避讓。
+- 部署、前端打包、雲端驗收、安全清理腳本，以及 GitHub Actions CI。
+
+尚未完成，因為目前沒有比賽 AWS 憑證：
+
+- 未在真實 AWS 帳號建立 S3、ECR、Lambda、API Gateway、Amplify 或 CloudWatch 資源。
+- 未在實際 Region 確認 Bedrock model／inference profile 存取，也未真正呼叫 Bedrock。
+- 未從公開 Amplify HTTPS 網址完成端到端演示、CORS、權限與 cloud/local parity 驗收。
+
+所以報告時可說「AWS-ready 程式與部署骨架已完成」，但在本頁的雲端驗收通過前，不可說「AWS／Bedrock 已部署成功」。
+
+## 唯一主路徑
 
 ~~~text
-Amplify Hosting 公開前端（比賽必做；本機前端保留為備援）
+Amplify Hosting（manual static deployment）
   ↓ NEXT_PUBLIC_API_BASE_URL
 API Gateway HTTP API
-  ├─ health / options / predict → Prediction Lambda 容器
-  │                              ├─ S3 runtime bucket
-  │                              ├─ LightGBM + SHAP
-  │                              └─ Bedrock Runtime
-  └─ reveal                    → Reveal Lambda 容器
-                                 └─ S3 truth bucket
+  ├─ health / options / predict / explain → Prediction Lambda 容器
+  │                                      ├─ private runtime S3
+  │                                      ├─ LightGBM + SHAP
+  │                                      └─ Bedrock Runtime（失敗就回固定範本）
+  └─ reveal                            → Reveal Lambda 容器
+                                         └─ private truth S3
 ~~~
 
-先不要同時做 SageMaker。只有 Lambda 冷啟動經實測不可接受、流量持續且高，或確實需要託管端點監控時，再評估 SageMaker Real-time Endpoint。
+不需要 SageMaker：模型小、演示流量低，Lambda 容器已足夠。AWS 只改變儲存、權限、服務位置與公開網址，不重訓模型，不改 68 欄順序、Platt 參數或門檻。
 
-## 現在已完成與待完成
+## 現場開始前準備
 
-| 項目 | 狀態 |
-|---|---|
-| 凍結 LightGBM、68欄、Platt、兩門檻 | 已完成 |
-| truth-free六月輸入、獨立reveal reference | 已完成 |
-| 本機 /api/health、options、predict、reveal | 已完成 |
-| 互動前端、Top-K、地圖、路線、揭曉 | 已完成 |
-| S3下載器與雜湊核對 | 待完成 |
-| Lambda handler與Linux容器 | 待完成 |
-| API Gateway、IAM與正式CORS | 待完成 |
-| LightGBM pred_contrib／SHAP原因 | 待完成 |
-| Bedrock Runtime呼叫與fallback | 待完成 |
-| 前端「AI營運摘要」面板 | 待完成 |
-| Amplify可部署前端與公開HTTPS驗收 | 待完成 |
-
-重要：backend/api.py 是本機 ThreadingHTTPServer，不是 Lambda handler；現有 UBIKE_*_PATH 只接受本機路徑，不能直接填 s3://。
-
-### 取得 AWS 憑證前必須完成
-
-- [ ] 凍結雲端 API schema，包含 LightGBM、SHAP、Bedrock provider與fallback欄位。
-- [ ] 完成S3 downloader、Lambda handlers、Linux容器及本機mock測試。
-- [ ] 完成LightGBM貢獻、中文原因、Bedrock受控摘要與失敗fallback。
-- [ ] 完成AI摘要面板，並修正地圖標記過大、密集站點編號重疊及自動縮放。
-- [ ] 產生Amplify可部署產物；production build不得回退到localhost API。
-- [ ] 完成IaC、最小權限IAM、部署／清除腳本及GitHub CI。
-- [ ] 一個指令通過13項模型/API測試、前端build與容器build。
-
-完成以上項目後，現場才只需登入帳號、選Region與Bedrock model、建立資源、填入正式Origin/API URL並做cloud/local parity驗收。
-
-## 0. 新筆電與帳號先確認
-
-1. Clone Repository，完整閱讀交接文件。
-2. 安裝 Git、64-bit Python 3.12、Node.js 22.13以上、AWS CLI v2及Docker Desktop。
-3. 使用自己的 IAM Identity Center／SSO暫時憑證，不可交換或提交長期Access Key。
-4. 選定一個有可用 Bedrock 模型的 Region，S3、ECR、Lambda、API Gateway盡量同Region。
-5. 先在本機執行：
+1. Clone Repository，讀完交接文件。
+2. 安裝 Git、64-bit Python 3.12、Node.js 22.13 以上、AWS CLI v2、AWS SAM CLI 與 Docker Desktop（Linux container mode）。
+3. 用 IAM Identity Center／SSO 或主辦方提供的短期憑證；不可把 Access Key 寫入 Git、`.env` 或網頁。
+4. 選定 Region，並確認所選 Bedrock model 或 inference profile 在該帳號／Region 可用。
+5. 先在本機執行全套測試：
 
 ~~~powershell
 Set-ExecutionPolicy -Scope Process Bypass
@@ -65,200 +53,119 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\scripts\smoke-test.ps1
 ~~~
 
-必須看到27,962筆 parity 且最大機率差為0，再碰 AWS。
+測試數量可隨實作增加，不要只數固定幾項；以當次全套實跑成功及六月 parity 為準。
 
-登入 AWS 後核對身分：
+登入後確認身分：
 
 ~~~powershell
 aws configure sso
 aws sts get-caller-identity
 ~~~
 
-## 1. S3 分層
+## 先預演，不建立資源
 
-建立兩個私有 bucket，名稱自行加 account及region以避免撞名：
-
-~~~text
-s3://ubike-demo-runtime-<account>-<region>/
-  releases/frozen-v1/model/lgbm_full.txt
-  releases/frozen-v1/config/final_policy_freeze_before_may.json
-  releases/frozen-v1/config/protocol_frozen_before_june.json
-  replays/2026-06/input/dynamic_red_empty_2026_06_input.parquet
-  stations/dim_station.csv
-
-s3://ubike-demo-truth-<account>-<region>/
-  replays/2026-06/truth/june_all_eligible_decisions.parquet
-~~~
-
-要求：
-
-- 兩個bucket都啟用Block Public Access與Versioning。
-- 瀏覽器只呼叫API Gateway，不可直接讀S3資料。
-- Prediction role完全不能讀truth bucket。
-- Reveal role只需讀truth物件，不需要Bedrock權限。
-- 不把含未來欄的 dynamic_red_empty_2026_06.parquet 給Prediction Lambda。
-- release key使用 frozen-v1 或commit SHA，不依賴 latest。
-
-上傳範例：
+`-DryRun` 會核對必要檔案、參數與 SAM 模板，不呼叫 AWS 建立資源：
 
 ~~~powershell
-$RuntimeBucket = "你的-runtime-bucket"
-$TruthBucket = "你的-truth-bucket"
-aws s3 cp model/lgbm_full.txt "s3://$RuntimeBucket/releases/frozen-v1/model/lgbm_full.txt"
-aws s3 cp config/final_policy_freeze_before_may.json "s3://$RuntimeBucket/releases/frozen-v1/config/final_policy_freeze_before_may.json"
-aws s3 cp config/protocol_frozen_before_june.json "s3://$RuntimeBucket/releases/frozen-v1/config/protocol_frozen_before_june.json"
-aws s3 cp data/source/dynamic_red_empty_2026_06_input.parquet "s3://$RuntimeBucket/replays/2026-06/input/dynamic_red_empty_2026_06_input.parquet"
-aws s3 cp data/stations/dim_station.csv "s3://$RuntimeBucket/stations/dim_station.csv"
-aws s3 cp data/reference/june_all_eligible_decisions.parquet "s3://$TruthBucket/replays/2026-06/truth/june_all_eligible_decisions.parquet"
+.\scripts\deploy-aws.ps1 -Region "ap-northeast-1" -DryRun
 ~~~
 
-不要將帳號ID、金鑰或登入資訊寫入GitHub。
+## 正式部署（有 AWS 憑證後）
 
-## 2. AWS 後端需要新增的檔案
+以 Bedrock 啟用為例；`BedrockModelId` 可以是 direct model ID 或 inference-profile ID。若是 direct model，資源清單放該 foundation-model ARN；若是 cross-Region inference profile，必須同時放 profile ARN 與它可能路由到的 foundation-model ARNs，不能只給 profile ARN。可先用 `aws bedrock get-inference-profile` 讀取 `models[].modelArn`；Global profile 還要依 [AWS 官方 Global cross-Region IAM 說明](https://docs.aws.amazon.com/bedrock/latest/userguide/global-cross-region-inference.html) 加入所需 regional／global FM ARN，並確認主辦帳號的 SCP 沒有阻擋目的 Region。
 
-建議新增並測試：
+~~~powershell
+$BedrockResourceArns = @(
+  "arn:aws:bedrock:SOURCE_REGION:ACCOUNT:inference-profile/PROFILE_ID"
+  "arn:aws:bedrock:DESTINATION_REGION::foundation-model/MODEL_ID"
+)
 
-- backend/s3_assets.py：冷啟動時下載固定S3 objects到 /tmp/ubikepredict，核對大小與SHA256。
-- backend/lambda_handler.py：解析API Gateway HTTP API payload format 2.0並呼叫現有DemoService方法。
-- backend/explanations.py：計算LightGBM貢獻、中文原因映射、固定模板fallback。
-- backend/bedrock_summary.py：Bedrock Runtime client、受控prompt、JSON schema驗證、timeout及cache。
-- Dockerfile.aws：以AWS Lambda Python 3.12 base image安裝固定版科學套件。
-- infra/：使用SAM、CDK或Terraform擇一，記錄S3、ECR、兩個Lambda、API Gateway、IAM及環境變數。
-- tests/test_explanations.py、tests/test_lambda_handler.py：本機不連AWS也能測核心邏輯。
+.\scripts\deploy-aws.ps1 `
+  -StackName "ubikepredict-demo" `
+  -Region "ap-northeast-1" `
+  -Profile "你的-aws-profile" `
+  -EnableBedrock `
+  -BedrockModelId "現場可用的-model-或-profile-id" `
+  -BedrockModelResourceArns $BedrockResourceArns
+~~~
 
-不要把 backend/api.py 原封不動上傳就宣稱是Lambda；必須新增真正handler，或明確採用並測試Lambda Web Adapter。對目前專案而言，直接handler較容易控制。
+若 profile 的 `models[]` 有多個 ARN，全部加入陣列。腳本會把這份明確清單寫入 Prediction role；不要為了省事改成 `Resource: "*"`。現場若無法確認 profile 的完整 IAM 範圍，先選可直接呼叫的單區模型，或先關閉 Bedrock 使用 template fallback。
 
-## 3. 冷啟動與檔案路徑
+腳本會依序：
 
-Prediction Lambda初始化階段：
+1. 驗證 SAM 模板。
+2. 透過 Docker/SAM 建置兩個 Lambda 容器映像並部署 CloudFormation stack。
+3. 把凍結 runtime 資產與 reveal truth 上傳到兩個不同的私有 S3 bucket。
+4. 以雲端 API URL 建置 Vinext 靜態網站，擋住任何 localhost 回退。
+5. 使用 Amplify manual deployment 上傳前端 ZIP。
+6. 執行雲端 health、predict、SHAP／摘要、reveal、CORS 與固定案例驗收；若使用 `-EnableBedrock`，摘要不是實際 `amazon_bedrock` 就會讓部署失敗。
 
-1. 從runtime bucket下載模型、兩份config、truth-free input與station CSV到 /tmp/ubikepredict。
-2. 下載後核對預期SHA256；錯誤就停止，不可帶錯版本繼續。
-3. 將既有環境變數指向 /tmp 中的本機檔案。
-4. 在handler外只初始化一次 FrozenYouBikeModel 與資料，warm invocation重用。
+上述是部署腳本自動驗收範圍。Prediction role 對 truth 的 `AccessDenied`、實際 throttle、另一台裝置開啟，以及 cloud/local parity（需先啟動本機 API 並另傳 `-LocalBaseUrl`）仍要依本頁「雲端必做驗收」逐項完成；不能只看到 stack 成功就宣稱全部驗收完成。
 
-Reveal Lambda只下載reference，最好做成輕量服務，不初始化模型。
+若一開始尚無 Bedrock 模型權限，可先不加 `-EnableBedrock` 完成其餘架構，此時 `operational_summary.provider` 會明確是 `template`，不可對外說成 Bedrock 產生。取得權限後重跑部署並完成 Bedrock 實際呼叫驗收。
 
-目前既有環境變數：
+## 腳本各自用途
+
+~~~powershell
+# 只重建可部署的靜態前端 ZIP（必須是 HTTPS API）
+.\scripts\package-frontend.ps1 -ApiBaseUrl "https://API_ID.execute-api.REGION.amazonaws.com/prod"
+
+# 對已部署 API 執行雲端驗收；加 LocalBaseUrl 會比較 cloud/local 機率
+# 使用 LocalBaseUrl 前，另一個 PowerShell 視窗必須先執行 .\scripts\start-local-app.ps1
+.\scripts\verify-cloud.ps1 `
+  -StackName "ubikepredict-demo" `
+  -Region "ap-northeast-1" `
+  -Profile "你的-aws-profile" `
+  -Origin "https://main.AMPLIFY_DOMAIN" `
+  -LocalBaseUrl "http://127.0.0.1:8000"
+
+# 要求驗收時必須真正由 Bedrock 回應；若降級為 template 便立即失敗
+.\scripts\verify-cloud.ps1 -BaseUrl "https://API_URL/prod" -Origin "https://main.AMPLIFY_DOMAIN" -RequireBedrock
+
+# 先只預覽將清理的 stack/buckets，不會刪除
+.\scripts\cleanup-aws.ps1 -StackName "ubikepredict-demo" -Region "ap-northeast-1" -Profile "你的-aws-profile"
+
+# 確認後才刪除這個 stack 擁有的版本化 bucket 內容與資源
+.\scripts\cleanup-aws.ps1 -StackName "ubikepredict-demo" -Region "ap-northeast-1" -Profile "你的-aws-profile" -Execute -DeleteBucketContents
+~~~
+
+`package-frontend.ps1` 在 Windows 會明確呼叫 `vinext.CMD`，並只對 Vinext 已完成靜態匯出後的已知 Windows shutdown assertion 作受限容錯；其他建置錯誤仍會停止。產物必須含 `frontend/dist/client/index.html`，而且不可含 `localhost:8000`。
+
+## S3 與 truth 權限邊界
+
+Runtime bucket 包含：
 
 ~~~text
-UBIKE_MODEL_PATH
-UBIKE_FREEZE_PATH
-UBIKE_PROTOCOL_PATH
-UBIKE_API_INPUT_PATH
-UBIKE_REFERENCE_PATH
-UBIKE_STATIONS_PATH
-UBIKE_ALLOWED_ORIGINS
-NEXT_PUBLIC_API_BASE_URL
+releases/frozen-v1/model/lgbm_full.txt
+releases/frozen-v1/config/final_policy_freeze_before_may.json
+releases/frozen-v1/config/protocol_frozen_before_june.json
+replays/2026-06/input/dynamic_red_empty_2026_06_input.parquet
+stations/dim_station.csv
 ~~~
 
-建議新增，但目前尚未實作：
+Truth bucket 只包含：
 
 ~~~text
-UBIKE_RUNTIME_BUCKET
-UBIKE_TRUTH_BUCKET
-UBIKE_RELEASE_ID=frozen-v1
-BEDROCK_ENABLED=true
-BEDROCK_MODEL_ID=<現場已取得存取權的model或inference profile>
-BEDROCK_REGION=<選填；省略時直接讀Lambda提供的AWS_REGION>
-BEDROCK_TIMEOUT_SECONDS=<短於API Gateway總timeout>
+replays/2026-06/truth/june_all_eligible_decisions.parquet
 ~~~
 
-`AWS_REGION` 是 Lambda 自動提供的保留環境變數，不可在 function configuration 自訂。只有 Bedrock 需要跨區時才另外設定 `BEDROCK_REGION`。
+兩個 bucket 都會啟用 Block Public Access、SSE-S3 與 Versioning。S3 loader 只接受程式中寫死的 allow-list keys，下載到 Lambda `/tmp/ubikepredict` 後必須通過檔案大小與 SHA256 才會被載入。
 
-Lambda容器是Linux且檔案系統唯讀，只有 /tmp 可寫。從Windows建置時明確使用 linux/amd64；若選ARM，LightGBM、NumPy、Pandas及PyArrow都要重新驗證。
+Prediction Lambda role 只能讀 runtime bucket 指定 objects，沒有 truth bucket 權限；Reveal Lambda role 只能讀指定 truth object，不初始化 LightGBM、不呼叫 Bedrock。
 
-## 4. SHAP／LightGBM貢獻怎麼做
+但 `POST /api/reveal` 是為了比賽回放而公開的 API 路由，使用者按「揭曉」後可取得所選站點的 30 分鐘後結果。安全主張應是「預測過程與 Prediction role 無法讀答案」，不是「答案從外部完全取得不到」。
 
-不必重訓模型，也不一定要新增 shap 套件。LightGBM Booster可用 pred_contrib=True產生每欄貢獻：
+## SHAP 與 Bedrock 的受控邊界
 
-~~~text
-matrix = engine.model_matrix(frame)
-contrib = engine.booster.predict(matrix, pred_contrib=True)
-~~~
+SHAP 不需重訓：LightGBM Booster 對同一筆 68 特徵使用 `pred_contrib=True`，前 68 欄為特徵對 raw score 的貢獻，最後一欄是 base value。測試會確認全部貢獻加總等於 LightGBM raw score。貢獻是原始分數單位，不能說成機率增加幾個百分點。
 
-- 前68欄對應凍結特徵，最後一欄是expected value。
-- 每列貢獻加總應等於該列LightGBM raw score；寫測試核對容許誤差。
-- 以絕對值排序，但前端分開顯示「提高風險」與「降低風險」。
-- SHAP值是raw-score貢獻，不能直接說成「增加幾個百分點機率」。
-- 原始欄名先經固定中文映射／主題分組，不可交給Bedrock自行猜欄位含義。
-- 缺值、站點ID、經緯度等特徵需要可理解的說法；無法安全翻譯就顯示較高層主題。
+中文特徵名、顯示值、貢獻方向與排序均由伺服器程式決定。送給 Bedrock 的只有 allow-listed station facts 與最多 8 個已驗證 SHAP factors；Bedrock 只能從提供的 feature IDs 選 1～3 個並指定受限主題。最終中文文字由伺服器用已驗證的站點事實重新組裝，因此 Bedrock 不能改機率、門檻、排名、路線或真值，也不能發明天氣、活動或因果關係。
 
-建議在 predict response 的行動站加入：
+Bedrock 關閉、沒有 model ID、逾時、呼叫失敗或 JSON 不合規時，核心預測不會失敗；API 改回 `provider: "template"` 與 `fallback_reason`。只有實際成功呼叫且通過驗證時才回 `provider: "amazon_bedrock"`。
 
-~~~json
-{
-  "top_factors": [
-    {
-      "feature": "red_duration_capped_6",
-      "label": "缺車已持續一段時間",
-      "direction": "increase",
-      "contribution": 0.42
-    }
-  ]
-}
-~~~
+## API Gateway、CORS 與 throttle
 
-這是確定性模型解釋，即使Bedrock失敗也要保留。
-
-## 5. Bedrock只負責整理
-
-建議新增 POST /api/explain，而不要讓每次predict都等待生成：
-
-~~~json
-{
-  "decision_time": "2026-06-29T09:00:00+08:00",
-  "station_id": 673
-}
-~~~
-
-後端自行找出該站已計算的風險、持續時間、路線順位及top_factors，再把受控JSON送給Bedrock。Bedrock輸出固定schema：
-
-~~~json
-{
-  "headline": "30分鐘後仍缺車風險偏高",
-  "reasons": [
-    "缺車已持續一段時間",
-    "近期車輛變化提高持續風險"
-  ],
-  "action_note": "建議保留於目前巡補關注清單",
-  "disclaimer": "此為決策輔助，不是實際派車指令"
-}
-~~~
-
-Prompt必須要求：
-
-- 只能使用輸入JSON中的事實。
-- 不可創造天氣、活動、交通、因果關係或精確需求量。
-- 不可改風險機率、門檻、排名、路線或真實結果。
-- 找不到原因時明確說資料不足。
-- 只回指定JSON，後端驗證後才送前端。
-
-Bedrock失敗、逾時、429或輸出不合法時，立即使用固定模板整理SHAP；核心預測不可一起失敗。前端只有收到真實Bedrock provider標記時才顯示「Amazon Bedrock」，fallback必須標為「模型原因摘要」，不能假裝是Bedrock生成。
-
-正式示範前必須由帳號管理者在實際Region確認所選模型可呼叫；第三方模型第一次使用可能還需要先完成模型存取或Marketplace流程。
-
-## 6. 前端需要新增
-
-點選行動站後，在地圖下方或右側加入「AI營運摘要」：
-
-- 站名、風險、門檻、路線順位。
-- SHAP主要推升因素與降低因素。
-- Bedrock中文摘要或明確fallback。
-- loading、timeout、失敗與重新整理狀態。
-- 清楚註明「解釋不影響模型分數」。
-
-API Gateway URL確定後，在 frontend/.env.local 設：
-
-~~~text
-NEXT_PUBLIC_API_BASE_URL=https://<api-id>.execute-api.<region>.amazonaws.com
-~~~
-
-這是前端build-time值；改URL後必須重新啟動或build。本機前端先用於開發與備援，但比賽完成版必須部署至Amplify Hosting，並以無痕視窗或另一台裝置驗證完整predict與reveal都不依賴localhost。
-
-## 7. API Gateway與CORS
-
-使用HTTP API、Lambda proxy integration payload format 2.0，路由：
+路由：
 
 ~~~text
 GET  /api/health
@@ -268,78 +175,60 @@ POST /api/explain
 POST /api/reveal
 ~~~
 
-API Gateway統一設定：
+POST 必須使用 `Content-Type: application/json`（可帶 charset），JSON body 不得超過 64KB。API Gateway 的預設 throttle 為 3 requests/second、burst 10；較慢的 `POST /api/explain` 另設 1 request/second、burst 2。數值是 CloudFormation 參數，現場若要改必須有理由並重新驗收。
 
-~~~text
-AllowOrigins: 實際前端的精確https網域；本機Demo階段另加http://localhost:3000
-AllowMethods: GET, POST, OPTIONS
-AllowHeaders: content-type, authorization
-AllowCredentials: false
+CORS 只允許實際 Amplify HTTPS origin、開發用 `http://localhost:3000`，以及可選的精確 HTTPS override。前端不得持有 AWS credentials，不直接讀 S3，也不直接呼叫 Bedrock。
+
+## 本機仍可獨立操作
+
+上雲程式沒有移除本機模式。Windows PowerShell 在 Repository 根目錄執行：
+
+~~~powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\scripts\start-local-app.ps1
 ~~~
 
-不要靠公開S3解決CORS。API Gateway啟用CORS後會處理preflight，避免與後端維護兩套衝突設定。整個LightGBM、SHAP及Bedrock回應必須短於HTTP API integration timeout；Bedrock timeout要更短，才能回傳fallback。
+開啟 `http://localhost:3000`。本機無 AWS 憑證時，SHAP 仍為真實 LightGBM 貢獻，營運摘要會明確標示為「本機備援／模型原因摘要」。
 
-## 8. IAM最小權限
+## GitHub Actions CI
 
-| Role | 只給這些能力 |
-|---|---|
-| Prediction Lambda | CloudWatch Logs、runtime bucket指定objects、指定Bedrock model/profile |
-| Reveal Lambda | CloudWatch Logs、truth bucket指定object |
-| Deploy/operator | ECR、Lambda、API Gateway部署；iam:PassRole只限上述roles |
+`.github/workflows/ci.yml` 會在推送到 `main` 與所有 pull request 執行：
 
-Prediction role的policy不可出現truth bucket ARN。S3固定key只需 s3:GetObject；只有真的需要列舉時才加入受prefix限制的s3:ListBucket。Bedrock通常只需指定資源的 bedrock:InvokeModel。若使用SSE-KMS，還需精確key的kms:Decrypt及相容key policy。
+- 凍結模型 smoke test 與全套 Python/API/Lambda/S3/SHAP/Bedrock 測試。
+- 前端 lint 與指向非 localhost HTTPS API 的靜態建置，並掃描產物是否殘留 localhost API。
+- SAM/CloudFormation lint validation。
+- Linux/amd64 Lambda 容器 build（不 push）。
 
-前端不可持有AWS credentials，也不可直接呼叫Bedrock。
+CI 通過只能證明程式、模板與容器可建置，不能取代實際 AWS 部署與 Bedrock 存取驗收。
 
-## 9. 必做驗收
+## 雲端必做驗收
 
-依序完成並留下截圖／log：
+1. 本機全套測試通過。
+2. 公開 `/api/health` 與 `/api/options` 正常。
+3. 預設三重案例為 23 個當下缺車、21 個可評分、12 個過平衡門檻、最終 Top-10。
+4. Reveal 預設案例為 7/10，重複 station ID 不會灌高結果。
+5. Cloud 與本機同站機率誤差不超過 `2e-7`。
+6. Prediction role 讀 truth object 必須 `AccessDenied`；Reveal role 可讀指定 truth object。
+7. SHAP 貢獻加總等於 raw score，且不含答案欄。
+8. Bedrock 啟用時，`/api/explain` 實際回 `provider: "amazon_bedrock"`；關閉或故意讓其失敗時仍有 `template` fallback。
+9. Amplify 無痕視窗可完成 predict、點站 explain 與 reveal，全程不依賴 localhost。
+10. 非白名單 Origin 被擋，真實 Amplify origin 可用；請求不會在網頁暴露 AWS 金鑰、S3 truth URL 或答案欄。
 
-1. 本機 smoke test全過。
-2. Cloud /api/health 回200。
-3. 預設三重案例：23個當下缺車、21個可評估、12個過平衡門檻、Top-10。
-4. Cloud與本機同一批機率誤差不超過2e-7。
-5. reveal預設案例為7/10；重複station ID不會灌高分。
-6. Prediction role讀truth物件必須AccessDenied。
-7. SHAP貢獻加總等於raw score，且不含答案欄。
-8. Bedrock正常時回合法schema；關閉或故意timeout時仍顯示固定模板。
-9. 非白名單Origin被擋，實際前端Origin可用。
-10. 瀏覽器不出現AWS金鑰、S3 truth URL或答案欄。
-11. 整次API呼叫低於API Gateway timeout；展示前先預熱一次。
+## Demo 現場檢查
 
-若任何一項失敗，先保留本機前端＋本機API作為可用fallback，不在最後一刻重訓或改門檻。
-
-## 10. 五分鐘Demo建議
-
-1. 官方地圖只能顯示「現在」；我們要分流短暫與持續紅燈。
-2. S3存放版本化模型輸入，truth權限分離。
-3. 執行LightGBM預測，顯示門檻、有限清單與路線示意。
-4. 點一站看SHAP原因；Bedrock只把原因整理成營運摘要。
-5. 揭曉30分鐘後結果，說明逐站計分及模型限制。
-6. 在AWS Console快速展示Lambda、API Gateway、S3權限及Bedrock呼叫紀錄。
+1. 在 Amplify 公開網址執行預測。
+2. 點選一個可評分站，看 SHAP 推升／降低因素。
+3. 如 `provider` 真為 `amazon_bedrock`，再說 Bedrock 已把受控因素整理成營運摘要；若為 `template`，就誠實展示 fallback。
+4. 揭曉30分鐘後結果，說明這是公開 reveal 回放路由，不是 Prediction Lambda 偷看答案。
+5. 快速展示 CloudFormation、兩個 Lambda roles、兩個私有 buckets 與 Bedrock 呼叫記錄。
 
 ## Definition of Done
 
-只有同時符合下列條件才可在簡報寫「AWS／Bedrock已完成」：
+只有同時符合下列條件，才可在簡報寫「AWS／Bedrock 已完成」：
 
-- AWS URL可由前端呼叫，完整predict與reveal不依賴本機API。
-- 模型輸入確實由私有S3取得，Prediction role不能讀truth。
-- SHAP原因來自同一筆LightGBM推論。
-- Bedrock在實際帳號及Region成功生成，且失敗時有fallback。
-- Cloud與本機數字一致，沒有用6月重新調參。
-- README的完成／未完成狀態已同步更新。
-
-## AWS官方參考
-
-- [S3安全最佳實務](https://docs.aws.amazon.com/AmazonS3/latest/userguide/security-best-practices.html)
-- [S3資料加密](https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingEncryption.html)
-- [Lambda容器映像](https://docs.aws.amazon.com/lambda/latest/dg/images-create.html)
-- [Lambda限制](https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-limits.html)
-- [API Gateway HTTP API Lambda整合](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-develop-integrations-lambda.html)
-- [API Gateway HTTP API CORS](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-cors.html)
-- [Bedrock InvokeModel](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel.html)
-- [Bedrock模型存取](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html)
-- [Bedrock Region支援](https://docs.aws.amazon.com/bedrock/latest/userguide/models-region-compatibility.html)
-- [Lambda execution role](https://docs.aws.amazon.com/lambda/latest/dg/lambda-intro-execution-role.html)
-- [IAM安全最佳實務](https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html)
-- [AWS CLI SSO](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html)
+- Amplify HTTPS 前端可從另一台裝置操作，不依賴 localhost。
+- 兩個 Lambda 確實從各自私有 S3 讀取對應資產，Prediction role 不能讀 truth。
+- SHAP 來自同一筆 LightGBM 推論，而且 sum check 通過。
+- Bedrock 在實際帳號／Region 成功回應並通過 allow-list 驗證，失敗時 fallback 仍可用。
+- Cloud/local parity、CORS、throttle、reveal 與權限邊界均驗收完成。
+- 沒有使用 6 月重訓、重校正或重選門檻。

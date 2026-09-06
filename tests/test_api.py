@@ -97,6 +97,74 @@ class DemoServiceTest(unittest.TestCase):
         self.assertTrue(AUDIT_ONLY_COLUMNS.isdisjoint(self.service.current_peak.columns))
         self.assertTrue(AUDIT_ONLY_COLUMNS.isdisjoint(self.service.eligible.columns))
 
+    def test_explain_uses_model_inputs_without_loading_truth(self) -> None:
+        prediction = self.service.predict(
+            {
+                "decision_time": "2026-06-29T09:00:00+08:00",
+                "district": "三重區",
+                "policy": "balanced",
+                "action_limit": 10,
+            }
+        )
+        station = prediction["actions"][0]
+        self.service._reference = None
+
+        explanation = self.service.explain(
+            {
+                "decision_time": prediction["decision_time"],
+                "district": prediction["district"],
+                "station_id": station["station_id"],
+                "policy": prediction["policy"]["id"],
+                "action_limit": prediction["action_limit"],
+            }
+        )
+
+        self.assertIsNone(self.service._reference)
+        self.assertEqual(explanation["station"]["station_id"], station["station_id"])
+        self.assertAlmostEqual(
+            explanation["station"]["risk_probability"], station["risk_probability"], places=6
+        )
+        self.assertLess(abs(explanation["shap"]["sum_error"]), 1e-6)
+        self.assertGreaterEqual(len(explanation["shap"]["factors"]), 1)
+        self.assertEqual(explanation["operational_summary"]["provider"], "template")
+        self.assertIn(
+            f"第{station['route_order']}順位",
+            explanation["operational_summary"]["text"],
+        )
+
+    def test_http_explain_rejects_unscored_station(self) -> None:
+        prediction = self.service.predict(
+            {
+                "decision_time": "2026-06-29T09:00:00+08:00",
+                "district": "三重區",
+                "policy": "balanced",
+                "action_limit": 10,
+            }
+        )
+        station_id = next(
+            row["station_id"]
+            for row in prediction["candidates"]
+            if row["status"] == "insufficient_history"
+        )
+        request = Request(
+            f"{self.base_url}/api/explain",
+            data=json.dumps(
+                {
+                    "decision_time": prediction["decision_time"],
+                    "district": prediction["district"],
+                    "station_id": station_id,
+                    "policy": "balanced",
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with self.assertRaises(HTTPError) as raised:
+            urlopen(request, timeout=5)
+        self.assertEqual(raised.exception.code, 400)
+        payload = json.loads(raised.exception.read().decode("utf-8"))
+        self.assertIn("缺少完整歷史", payload["error"])
+
     def test_reveal_deduplicates_station_ids_before_scoring(self) -> None:
         prediction = self.service.predict(
             {

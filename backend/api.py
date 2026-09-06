@@ -8,9 +8,12 @@ This mirrors the later S3 input/truth separation without requiring AWS locally.
 """
 
 import argparse
+import copy
 import json
 import math
 import os
+import threading
+import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -20,6 +23,8 @@ from urllib.parse import parse_qs, urlparse
 import numpy as np
 import pandas as pd
 
+from backend.bedrock_summary import BedrockSummaryService, compose_explain_response
+from backend.explanations import explain_row
 from backend.inference import (
     AUDIT_ONLY_COLUMNS,
     JULY_START,
@@ -189,6 +194,11 @@ class DemoService:
         )
         self.eligible = select_eligible_june(source)
         self._reference: pd.DataFrame | None = None
+        self.summary_service = BedrockSummaryService()
+        self._explain_cache: dict[
+            tuple[int, str, int, str, int], tuple[float, dict[str, Any]]
+        ] = {}
+        self._explain_cache_lock = threading.Lock()
 
         self.decision_times = sorted(self.eligible["datetime"].drop_duplicates().tolist())
         self.districts_by_time: dict[pd.Timestamp, list[dict[str, Any]]] = {}
@@ -372,6 +382,118 @@ class DemoService:
             "scoring_note": "逐快照比較t+30是否仍為0車，不使用Episode命中。",
         }
 
+    def explain(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Explain one truth-free prediction with TreeSHAP and a safe summary."""
+        requested_time = payload.get("decision_time")
+        if not requested_time:
+            raise ValueError("decision_time 不可為空")
+        decision_time = _local_timestamp(requested_time)
+        if decision_time not in self.decision_times:
+            raise ValueError("decision_time 不在六月可評估的尖峰時點")
+
+        raw_station_id = payload.get("station_id")
+        if isinstance(raw_station_id, bool):
+            raise ValueError("station_id 必須是整數")
+        try:
+            station_id = int(raw_station_id)
+        except (TypeError, ValueError) as error:
+            raise ValueError("station_id 必須是整數") from error
+        if isinstance(raw_station_id, float) and not raw_station_id.is_integer():
+            raise ValueError("station_id 必須是整數")
+
+        district = str(payload.get("district", "")).strip()
+        if not district:
+            raise ValueError("district 不可為空")
+        policy = str(payload.get("policy", "balanced"))
+        if policy not in {"balanced", "strict"}:
+            raise ValueError("policy 必須是 balanced 或 strict")
+        action_limit = int(payload.get("action_limit", 10))
+        if not 1 <= action_limit <= 25:
+            raise ValueError("action_limit 必須介於1到25")
+
+        cache_key = (int(decision_time.value), district, station_id, policy, action_limit)
+        now = time.monotonic()
+        with self._explain_cache_lock:
+            cached_entry = self._explain_cache.get(cache_key)
+            if cached_entry is not None and cached_entry[0] <= now:
+                self._explain_cache.pop(cache_key, None)
+                cached_entry = None
+        if cached_entry is not None:
+            return copy.deepcopy(cached_entry[1])
+
+        model_row = self.eligible.loc[
+            self.eligible["datetime"].eq(decision_time)
+            & self.eligible["station_id"].eq(station_id)
+        ].drop_duplicates("station_id", keep="last")
+        if model_row.empty:
+            raise ValueError("此站在該時點缺少完整歷史，無法產生模型解釋")
+
+        prediction = self.predict(
+            {
+                "decision_time": decision_time,
+                "district": district,
+                "policy": policy,
+                "action_limit": action_limit,
+            }
+        )
+        station = next(
+            (
+                candidate
+                for candidate in prediction["candidates"]
+                if candidate["station_id"] == station_id
+            ),
+            None,
+        )
+        if station is None:
+            raise ValueError("station_id 不屬於指定行政區")
+        if station["status"] != "scored":
+            raise ValueError("此站在該時點缺少完整歷史，無法產生模型解釋")
+
+        threshold = prediction["policy"]["threshold"]
+        probability = station["risk_probability"]
+        if probability is None:
+            raise RuntimeError("模型未產生有效風險機率")
+        station_facts = {
+            "station_id": station_id,
+            "station_name": station["station_name"],
+            "district": district,
+            "decision_time": _iso_taipei(decision_time),
+            "target_time": _iso_taipei(decision_time + pd.Timedelta(minutes=30)),
+            "risk_probability": probability,
+            "red_duration_display": station["red_duration_display"],
+            "route_order": station["route_order"],
+            "policy_label": prediction["policy"]["label"],
+            "threshold": threshold,
+        }
+        shap = explain_row(self.engine, model_row)
+        response = compose_explain_response(
+            station_facts,
+            shap,
+            service=self.summary_service,
+        )
+        result = {
+            "decision_time": station_facts["decision_time"],
+            "target_time": station_facts["target_time"],
+            "station": {
+                "station_id": station_id,
+                "station_name": station["station_name"],
+                "district": district,
+                "risk_probability": probability,
+                "red_duration_display": station["red_duration_display"],
+            },
+            **response,
+        }
+        fallback_reason = result["operational_summary"].get("fallback_reason")
+        cache_seconds = 15 if fallback_reason in {"bedrock_timeout", "bedrock_error"} else 900
+        with self._explain_cache_lock:
+            if len(self._explain_cache) >= 256:
+                self._explain_cache.pop(next(iter(self._explain_cache)))
+            self._explain_cache[cache_key] = (
+                time.monotonic() + cache_seconds,
+                copy.deepcopy(result),
+            )
+        return result
+
     @staticmethod
     def _station_record(row: Any, is_scored: bool) -> dict[str, Any]:
         def get(name: str, default: Any = None) -> Any:
@@ -381,6 +503,8 @@ class DemoService:
 
         station_id = int(get("station_id"))
         probability = _safe_number(get("p_lgbm_full")) if is_scored else None
+        duration_steps = get("red_duration_steps") if is_scored else None
+        risk_rank = get("risk_rank") if is_scored else None
         record = {
             "station_id": station_id,
             "station_name": _safe_text(get("station_name"), f"站點 {station_id}"),
@@ -390,11 +514,15 @@ class DemoService:
             "current_bikes": int(get("available_bikes", 0)),
             "current_docks": int(get("available_docks", 0)),
             "capacity": int(get("capacity", 0)),
-            "red_duration_steps": int(get("red_duration_steps")) if is_scored else None,
-            "red_duration_display": _duration_text(get("red_duration_steps") if is_scored else None),
+            "red_duration_steps": (
+                int(duration_steps) if duration_steps is not None and not pd.isna(duration_steps) else None
+            ),
+            "red_duration_display": _duration_text(duration_steps),
             "status": "scored" if is_scored else "insufficient_history",
             "risk_probability": probability,
-            "risk_rank": int(get("risk_rank")) if is_scored else None,
+            "risk_rank": (
+                int(risk_rank) if risk_rank is not None and not pd.isna(risk_rank) else None
+            ),
             "is_alert": bool(get("is_alert", False)) if is_scored else False,
             "in_action_list": False,
             "route_order": None,
@@ -446,6 +574,9 @@ class DemoRequestHandler(BaseHTTPRequestHandler):
             if parsed.path == "/api/reveal":
                 self._write_json(self.service.reveal(payload))
                 return
+            if parsed.path == "/api/explain":
+                self._write_json(self.service.explain(payload))
+                return
             self._write_json({"error": "找不到此端點"}, HTTPStatus.NOT_FOUND)
         except (ValueError, TypeError, json.JSONDecodeError) as error:
             self._write_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
@@ -456,6 +587,9 @@ class DemoRequestHandler(BaseHTTPRequestHandler):
         print(f"[api] {self.address_string()} - {format % args}")
 
     def _read_json(self) -> dict[str, Any]:
+        content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+        if content_type != "application/json":
+            raise ValueError("Content-Type 必須是 application/json")
         content_length = int(self.headers.get("Content-Length", "0"))
         if content_length <= 0 or content_length > 64 * 1024:
             raise ValueError("請提供有效的JSON請求")

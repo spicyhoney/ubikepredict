@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Frozen model and API tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-aws.txt
+      - name: Install Python dependencies
+        run: python -m pip install --requirement requirements-aws.txt
+      - name: Run frozen-model smoke tests
+        run: python tests/smoke_test.py
+      - name: Run API and Lambda unit tests
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+
+  frontend:
+    name: Frontend lint and static build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: Lint frontend
+        working-directory: frontend
+        run: pnpm run lint
+      - name: Build static frontend
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_BASE_URL: https://example.invalid
+        run: pnpm run build
+      - name: Verify static artifact and API safety
+        working-directory: frontend
+        shell: bash
+        run: |
+          test -f dist/client/index.html
+          if grep -R -E '(localhost|127\.0\.0\.1):8000' dist/client --include='*.html' --include='*.js' --include='*.json' --include='*.rsc'; then
+            echo 'Static artifact contains a localhost API reference.' >&2
+            exit 1
+          fi
+
+  infrastructure:
+    name: SAM template validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/setup-sam@v2
+      - name: Validate SAM and CloudFormation
+        run: sam validate --template-file infra/template.yaml --lint --region ap-northeast-1
+
+  container:
+    name: Lambda Linux container build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build Lambda container without pushing
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.aws
+          platforms: linux/amd64
+          push: false
+          tags: ubikepredict-lambda:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

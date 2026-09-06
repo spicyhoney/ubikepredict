@@ -8,8 +8,9 @@
   },
   "scripts": {
     "dev": "vinext dev",
-    "build": "vinext build",
-    "start": "wrangler dev --config dist/server/wrangler.json",
+    "prebuild": "node scripts/check-production-env.mjs",
+    "build": "node scripts/build-static.mjs",
+    "start": "vinext start",
     "lint": "oxlint app types",
     "format": "oxfmt"
   },

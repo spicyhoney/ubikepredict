@@ -27,7 +27,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
+const API_BASE_URL = (
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000'
+).replace(/\/+$/, '');
 
 type PolicyId = 'balanced' | 'strict';
 
@@ -108,6 +110,37 @@ type RevealResponse = {
   scoring_note: string;
 };
 
+type ShapFactor = {
+  feature: string;
+  label: string;
+  value_display: string;
+  contribution: number;
+  direction: 'increase' | 'decrease';
+};
+
+type ExplainResponse = {
+  decision_time: string;
+  target_time: string;
+  station: {
+    station_id: number;
+    station_name: string;
+    district: string;
+    risk_probability: number;
+  };
+  shap: {
+    base_value_raw: number;
+    raw_score: number;
+    sum_error: number;
+    factors: ShapFactor[];
+    disclaimer: string;
+  };
+  operational_summary: {
+    provider: 'amazon_bedrock' | 'template';
+    text: string;
+    fallback_reason?: string | null;
+  };
+};
+
 type RunInput = {
   scenarioId?: string;
   policy?: PolicyId;
@@ -175,6 +208,49 @@ function projectCandidates(candidates: Candidate[]) {
   );
 }
 
+function spreadActionPositions(
+  basePositions: Map<number, { x: number; y: number }>,
+  actions: Candidate[],
+) {
+  const positions = new Map(
+    Array.from(basePositions, ([stationId, point]) => [stationId, { ...point }]),
+  );
+  const actionPoints = actions
+    .map((station) => ({ stationId: station.station_id, point: positions.get(station.station_id) }))
+    .filter(
+      (item): item is { stationId: number; point: { x: number; y: number } } =>
+        Boolean(item.point),
+    );
+
+  const minimumDistance = 5.4;
+  for (let iteration = 0; iteration < 24; iteration += 1) {
+    for (let leftIndex = 0; leftIndex < actionPoints.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < actionPoints.length; rightIndex += 1) {
+        const left = actionPoints[leftIndex];
+        const right = actionPoints[rightIndex];
+        let dx = right.point.x - left.point.x;
+        let dy = right.point.y - left.point.y;
+        let distance = Math.hypot(dx, dy);
+        if (distance >= minimumDistance) continue;
+        if (distance < 0.05) {
+          const angle = ((left.stationId + right.stationId) % 12) * (Math.PI / 6);
+          dx = Math.cos(angle);
+          dy = Math.sin(angle);
+          distance = 1;
+        }
+        const movement = (minimumDistance - distance) / 2;
+        const unitX = dx / distance;
+        const unitY = dy / distance;
+        left.point.x = Math.min(95, Math.max(5, left.point.x - unitX * movement));
+        left.point.y = Math.min(71, Math.max(5, left.point.y - unitY * movement));
+        right.point.x = Math.min(95, Math.max(5, right.point.x + unitX * movement));
+        right.point.y = Math.min(71, Math.max(5, right.point.y + unitY * movement));
+      }
+    }
+  }
+  return positions;
+}
+
 function outcomeFor(reveal: RevealResponse | null, stationId: number) {
   return reveal?.results.find((item) => item.station_id === stationId)?.still_empty ?? null;
 }
@@ -192,16 +268,25 @@ function RiskMap({
   prediction,
   reveal,
   selectedStationId,
+  onSelectStation,
 }: {
   prediction: PredictionResponse;
   reveal: RevealResponse | null;
   selectedStationId: number | null;
+  onSelectStation: (stationId: number) => void;
 }) {
-  const positions = useMemo(() => projectCandidates(prediction.candidates), [prediction.candidates]);
+  const basePositions = useMemo(
+    () => projectCandidates(prediction.candidates),
+    [prediction.candidates],
+  );
+  const badgePositions = useMemo(
+    () => spreadActionPositions(basePositions, prediction.actions),
+    [basePositions, prediction.actions],
+  );
   const routePoints = prediction.actions
     .slice()
     .sort((left, right) => (left.route_order ?? 99) - (right.route_order ?? 99))
-    .map((station) => positions.get(station.station_id))
+    .map((station) => basePositions.get(station.station_id))
     .filter((position): position is { x: number; y: number } => Boolean(position))
     .map((position) => `${position.x},${position.y}`)
     .join(' ');
@@ -238,28 +323,73 @@ function RiskMap({
             <path d="M58 1 C51 26, 72 44, 67 77" />
             <path d="M86 5 C72 22, 91 48, 81 74" />
           </g>
-          <text x="7" y="74" className="map-label">實際站點經緯度 · 示意底圖</text>
+          <text x="7" y="74" className="map-label">站點與路線採實際相對座標 · 密集編號已視覺避讓</text>
           {routePoints && <polyline points={routePoints} className="route-halo" />}
           {routePoints && <polyline points={routePoints} className="route-line" />}
           {prediction.candidates.map((station) => {
-            const position = positions.get(station.station_id);
+            const position = basePositions.get(station.station_id);
             if (!position) return null;
             const outcome = outcomeFor(reveal, station.station_id);
             const selectedClass = station.station_id === selectedStationId ? ' selected' : '';
+            const interactive = station.status === 'scored';
             return (
               <g
                 key={station.station_id}
-                className="station-marker"
+                className={`station-marker${interactive ? ' interactive' : ''}`}
                 transform={`translate(${position.x} ${position.y})`}
                 aria-label={`${station.station_name}，風險${riskText(station.risk_probability)}`}
+                tabIndex={interactive ? 0 : undefined}
+                onClick={interactive ? () => onSelectStation(station.station_id) : undefined}
+                onKeyDown={interactive ? (event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onSelectStation(station.station_id);
+                  }
+                } : undefined}
               >
                 <title>{station.station_name}：{riskText(station.risk_probability)}</title>
+                {interactive && <circle r="3.4" className="station-hit-target" />}
                 <circle
-                  r={station.in_action_list ? 3.4 : station.is_alert ? 2.25 : 1.75}
+                  r={station.in_action_list ? 1.55 : station.is_alert ? 1.35 : 0.9}
                   className={`${markerClass(station, outcome)}${selectedClass}`}
                   filter={station.in_action_list ? 'url(#point-glow)' : undefined}
                 />
-                {station.in_action_list && <text y="1.15" textAnchor="middle">{station.route_order}</text>}
+              </g>
+            );
+          })}
+          {prediction.actions.map((station) => {
+            const base = basePositions.get(station.station_id);
+            const badge = badgePositions.get(station.station_id);
+            if (!base || !badge) return null;
+            const outcome = outcomeFor(reveal, station.station_id);
+            const selectedClass = station.station_id === selectedStationId ? ' selected' : '';
+            const moved = Math.hypot(base.x - badge.x, base.y - badge.y) > 0.35;
+            return (
+              <g key={`badge-${station.station_id}`}>
+                {moved && (
+                  <line x1={base.x} y1={base.y} x2={badge.x} y2={badge.y} className="badge-leader" />
+                )}
+                <g
+                  className="station-marker route-badge interactive"
+                  transform={`translate(${badge.x} ${badge.y})`}
+                  aria-label={`巡補順位${station.route_order}，${station.station_name}`}
+                  tabIndex={0}
+                  onClick={() => onSelectStation(station.station_id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      onSelectStation(station.station_id);
+                    }
+                  }}
+                >
+                  <circle r="3.4" className="station-hit-target" />
+                  <circle
+                    r="2.35"
+                    className={`${markerClass(station, outcome)}${selectedClass}`}
+                    filter="url(#point-glow)"
+                  />
+                  <text y="0.78" textAnchor="middle">{station.route_order}</text>
+                </g>
               </g>
             );
           })}
@@ -288,6 +418,91 @@ function RiskMap({
   );
 }
 
+function StationInsight({
+  station,
+  explanation,
+  loading,
+  error,
+}: {
+  station: Candidate | null;
+  explanation: ExplainResponse | null;
+  loading: boolean;
+  error: string | null;
+}) {
+  const factors = explanation?.shap.factors ?? [];
+  const largestContribution = Math.max(
+    ...factors.map((factor) => Math.abs(factor.contribution)),
+    0.0001,
+  );
+  const isBedrock = explanation?.operational_summary.provider === 'amazon_bedrock';
+
+  return (
+    <section className="insight-panel" aria-label="站點風險解釋與營運摘要">
+      <div className="insight-heading">
+        <div><span className="eyebrow">站點風險解釋</span><h2>{station?.station_name ?? '選擇一個站點'}</h2></div>
+        {station?.risk_probability !== null && station && (
+          <strong className="insight-risk">{riskText(station.risk_probability)}</strong>
+        )}
+      </div>
+
+      <div className="insight-body">
+        {!station && <div className="insight-empty">從行動清單或地圖選擇站點，即可查看模型原因。</div>}
+        {station && loading && (
+          <div className="insight-empty"><LoaderCircle size={22} className="spin" />正在整理模型原因</div>
+        )}
+        {station && error && !loading && (
+          <div className="insight-error"><TriangleAlert size={16} />{error}</div>
+        )}
+        {station && explanation && !loading && (
+          <>
+            <div className="shap-title">
+              <strong>模型原因｜SHAP</strong>
+              <span>紅色推高風險，綠色降低風險</span>
+            </div>
+            <div className="factor-list">
+              {factors.map((factor) => (
+                <div className="factor-row" key={`${factor.feature}-${factor.direction}`}>
+                  <div>
+                    <strong>{factor.label}</strong>
+                    <span>{factor.value_display}</span>
+                  </div>
+                  <div className="factor-meter" aria-label={`${factor.label}貢獻${factor.contribution}`}>
+                    <i
+                      className={factor.direction === 'increase' ? 'increase' : 'decrease'}
+                      style={{ width: `${Math.max(12, Math.abs(factor.contribution) / largestContribution * 100)}%` }}
+                    />
+                  </div>
+                  <b className={factor.direction === 'increase' ? 'increase' : 'decrease'}>
+                    {factor.contribution > 0 ? '+' : ''}{factor.contribution.toFixed(2)}
+                  </b>
+                </div>
+              ))}
+            </div>
+            <small className="shap-note">{explanation.shap.disclaimer}</small>
+
+            <article className="ai-summary">
+              <div>
+                <span className="ai-mark"><Sparkles size={15} /></span>
+                <strong>{isBedrock ? 'Amazon Bedrock 營運摘要' : '模型原因摘要'}</strong>
+                <em>{isBedrock ? 'AI 整理' : '本機備援'}</em>
+              </div>
+              <p>{explanation.operational_summary.text}</p>
+              {!isBedrock && (
+                <small>尚未連接 Bedrock 時使用固定模板；預測與 SHAP 仍為真實模型結果。</small>
+              )}
+            </article>
+          </>
+        )}
+      </div>
+
+      <div className="model-flow" aria-label="模型處理流程">
+        <span>LightGBM</span><i>→</i><span>SHAP</span><i>→</i>
+        <span className={isBedrock ? 'active' : ''}>{isBedrock ? 'Amazon Bedrock' : '文字備援'}</span>
+      </div>
+    </section>
+  );
+}
+
 export default function Home() {
   const [options, setOptions] = useState<OptionsResponse | null>(null);
   const [scenarioId, setScenarioId] = useState('representative');
@@ -297,7 +512,20 @@ export default function Home() {
   const [selectedStationId, setSelectedStationId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [revealing, setRevealing] = useState(false);
+  const [explanation, setExplanation] = useState<ExplainResponse | null>(null);
+  const [explainLoading, setExplainLoading] = useState(false);
+  const [explainError, setExplainError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const selectedStationIdRef = useRef<number | null>(null);
+
+  const selectStation = useCallback((stationId: number | null) => {
+    if (selectedStationIdRef.current === stationId) return;
+    selectedStationIdRef.current = stationId;
+    setSelectedStationId(stationId);
+    setExplanation(null);
+    setExplainError(null);
+    setExplainLoading(stationId !== null);
+  }, []);
 
   const runPrediction = useCallback(async (input: RunInput = {}) => {
     const activeOptions = options;
@@ -311,7 +539,9 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setReveal(null);
-    setSelectedStationId(null);
+    setExplanation(null);
+    setExplainError(null);
+    selectStation(null);
     setScenarioId(requestedScenarioId);
     setPolicy(requestedPolicy);
     try {
@@ -327,7 +557,9 @@ export default function Home() {
       });
       const payload = await response.json() as PredictionResponse & { error?: string };
       if (!response.ok) throw new Error(payload.error ?? '預測服務沒有回應');
-      setPrediction(payload as PredictionResponse);
+      const loadedPrediction = payload as PredictionResponse;
+      setPrediction(loadedPrediction);
+      selectStation(loadedPrediction.actions[0]?.station_id ?? null);
       return {
         scenario: scenario.label,
         policy: requestedPolicy,
@@ -340,7 +572,7 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, [options, policy, scenarioId]);
+  }, [options, policy, scenarioId, selectStation]);
 
   const revealOutcome = useCallback(async () => {
     if (!prediction || !prediction.actions.length) throw new Error('目前沒有可揭曉的行動清單');
@@ -400,7 +632,11 @@ export default function Home() {
         });
         const predictionPayload = await predictionResponse.json() as PredictionResponse & { error?: string };
         if (!predictionResponse.ok) throw new Error(predictionPayload.error ?? '預測服務沒有回應');
-        if (active) setPrediction(predictionPayload as PredictionResponse);
+        if (active) {
+          const loadedPrediction = predictionPayload as PredictionResponse;
+          setPrediction(loadedPrediction);
+          selectStation(loadedPrediction.actions[0]?.station_id ?? null);
+        }
       } catch (requestError) {
         if (active) setError(requestError instanceof Error ? requestError.message : '無法啟動Demo');
       } finally {
@@ -409,7 +645,39 @@ export default function Home() {
     }
     void initialize();
     return () => { active = false; };
-  }, []);
+  }, [selectStation]);
+
+  useEffect(() => {
+    if (!prediction || selectedStationId === null) return;
+    const lifecycle = new AbortController();
+
+    void fetch(`${API_BASE_URL}/api/explain`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        decision_time: prediction.decision_time,
+        district: prediction.district,
+        station_id: selectedStationId,
+        policy: prediction.policy.id,
+        action_limit: prediction.action_limit,
+      }),
+      signal: lifecycle.signal,
+    })
+      .then(async (response) => {
+        const payload = await response.json() as ExplainResponse & { error?: string };
+        if (!response.ok) throw new Error(payload.error ?? '無法載入模型原因');
+        setExplanation(payload as ExplainResponse);
+      })
+      .catch((requestError: unknown) => {
+        if (requestError instanceof DOMException && requestError.name === 'AbortError') return;
+        setExplainError(requestError instanceof Error ? requestError.message : '無法載入模型原因');
+      })
+      .finally(() => {
+        if (!lifecycle.signal.aborted) setExplainLoading(false);
+      });
+
+    return () => lifecycle.abort();
+  }, [prediction, selectedStationId]);
 
   useEffect(() => {
     const context = document.modelContext;
@@ -451,6 +719,8 @@ export default function Home() {
 
   const activeScenario = options?.scenarios.find((item) => item.id === scenarioId);
   const activePolicy = options?.policies.find((item) => item.id === policy);
+  const selectedStation =
+    prediction?.candidates.find((station) => station.station_id === selectedStationId) ?? null;
 
   return (
     <main className="app-shell">
@@ -527,7 +797,7 @@ export default function Home() {
           <Button
             className="run-button"
             size="lg"
-            disabled={!options || loading}
+            disabled={!options || loading || revealing}
             onClick={() => void runPrediction().catch(() => undefined)}
           >
             {loading ? <LoaderCircle size={17} className="spin" /> : <Sparkles size={17} />}
@@ -589,59 +859,69 @@ export default function Home() {
             prediction={prediction}
             reveal={reveal}
             selectedStationId={selectedStationId}
+            onSelectStation={selectStation}
           />
 
-          <aside className="action-panel">
-            <div className="panel-heading">
-              <div><span className="eyebrow">行動清單</span><h2>優先巡補順序</h2></div>
-              <span className="count-badge">{prediction.summary.action_count} 站</span>
-            </div>
-            <div className="station-list">
-              {prediction.actions.length ? prediction.actions.map((station) => {
-                const outcome = outcomeFor(reveal, station.station_id);
-                return (
-                  <button
-                    className={`station-row ${selectedStationId === station.station_id ? 'active' : ''}`}
-                    key={station.station_id}
-                    onClick={() => setSelectedStationId(station.station_id)}
-                  >
-                    <span className="route-number">{station.route_order}</span>
-                    <span className="station-copy">
-                      <strong>{station.station_name}</strong>
-                      <span>
-                        {station.red_duration_display}
-                        {station.distance_from_previous_km ? ` · 距前站${station.distance_from_previous_km}km` : ''}
+          <div className="side-stack">
+            <aside className="action-panel">
+              <div className="panel-heading">
+                <div><span className="eyebrow">行動清單</span><h2>優先巡補順序</h2></div>
+                <span className="count-badge">{prediction.summary.action_count} 站</span>
+              </div>
+              <div className="station-list">
+                {prediction.actions.length ? prediction.actions.map((station) => {
+                  const outcome = outcomeFor(reveal, station.station_id);
+                  return (
+                    <button
+                      className={`station-row ${selectedStationId === station.station_id ? 'active' : ''}`}
+                      key={station.station_id}
+                      onClick={() => selectStation(station.station_id)}
+                    >
+                      <span className="route-number">{station.route_order}</span>
+                      <span className="station-copy">
+                        <strong>{station.station_name}</strong>
+                        <span>
+                          {station.red_duration_display}
+                          {station.distance_from_previous_km ? ` · 距前站${station.distance_from_previous_km}km` : ''}
+                        </span>
                       </span>
-                    </span>
-                    <span className="risk-copy">
-                      {outcome === true && <AlertTriangle size={15} className="outcome-still-empty" />}
-                      {outcome === false && <CheckCircle2 size={15} className="outcome-recovered" />}
-                      <strong>{riskText(station.risk_probability)}</strong>
-                      <span>{outcome === true ? '仍為0車' : outcome === false ? '已恢復有車' : '持續風險'}</span>
-                    </span>
-                  </button>
-                );
-              }) : (
-                <div className="empty-actions">
-                  <CheckCircle2 size={28} />
-                  <strong>沒有站點超過門檻</strong>
-                  <span>系統不會為了湊滿名額加入低風險站。</span>
-                </div>
-              )}
-            </div>
-            <div className="panel-footer">
-              <Button
-                variant="outline"
-                className="reveal-button"
-                disabled={!prediction.actions.length || revealing || Boolean(reveal)}
-                onClick={() => void revealOutcome().catch(() => undefined)}
-              >
-                {revealing ? <LoaderCircle size={16} className="spin" /> : <Eye size={16} />}
-                {reveal ? '已揭曉30分鐘後結果' : `揭曉 ${formatLocalTime(prediction.target_time)} 結果`}
-              </Button>
-              <span>每站各算一次，不採整段事件灌水</span>
-            </div>
-          </aside>
+                      <span className="risk-copy">
+                        {outcome === true && <AlertTriangle size={15} className="outcome-still-empty" />}
+                        {outcome === false && <CheckCircle2 size={15} className="outcome-recovered" />}
+                        <strong>{riskText(station.risk_probability)}</strong>
+                        <span>{outcome === true ? '仍為0車' : outcome === false ? '已恢復有車' : '持續風險'}</span>
+                      </span>
+                    </button>
+                  );
+                }) : (
+                  <div className="empty-actions">
+                    <CheckCircle2 size={28} />
+                    <strong>沒有站點超過門檻</strong>
+                    <span>系統不會為了湊滿名額加入低風險站。</span>
+                  </div>
+                )}
+              </div>
+              <div className="panel-footer">
+                <Button
+                  variant="outline"
+                  className="reveal-button"
+                  disabled={!prediction.actions.length || loading || revealing || Boolean(reveal)}
+                  onClick={() => void revealOutcome().catch(() => undefined)}
+                >
+                  {revealing ? <LoaderCircle size={16} className="spin" /> : <Eye size={16} />}
+                  {reveal ? '已揭曉30分鐘後結果' : `揭曉 ${formatLocalTime(prediction.target_time)} 結果`}
+                </Button>
+                <span>每站各算一次，不採整段事件灌水</span>
+              </div>
+            </aside>
+
+            <StationInsight
+              station={selectedStation}
+              explanation={explanation}
+              loading={explainLoading}
+              error={explainError}
+            />
+          </div>
         </section>
       ) : (
         <section className="workspace-placeholder">
