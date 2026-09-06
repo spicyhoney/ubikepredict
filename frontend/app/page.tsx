@@ -16,7 +16,6 @@ import {
   Route,
   Sparkles,
   TriangleAlert,
-  XCircle,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -181,11 +180,12 @@ function outcomeFor(reveal: RevealResponse | null, stationId: number) {
 }
 
 function markerClass(station: Candidate, outcome: boolean | null) {
-  if (station.in_action_list && outcome === true) return 'point hit';
-  if (station.in_action_list && outcome === false) return 'point miss';
+  if (station.in_action_list && outcome === true) return 'point still-empty';
+  if (station.in_action_list && outcome === false) return 'point recovered';
   if (station.in_action_list) return 'point action';
   if (station.status === 'insufficient_history') return 'point unknown';
-  return 'point observed';
+  if (station.is_alert) return 'point overflow-alert';
+  return 'point below-threshold';
 }
 
 function RiskMap({
@@ -255,7 +255,7 @@ function RiskMap({
               >
                 <title>{station.station_name}：{riskText(station.risk_probability)}</title>
                 <circle
-                  r={station.in_action_list ? 3.4 : 1.75}
+                  r={station.in_action_list ? 3.4 : station.is_alert ? 2.25 : 1.75}
                   className={`${markerClass(station, outcome)}${selectedClass}`}
                   filter={station.in_action_list ? 'url(#point-glow)' : undefined}
                 />
@@ -275,10 +275,13 @@ function RiskMap({
 
       <div className="map-legend">
         <span><i className="legend-dot action" />行動清單</span>
-        <span><i className="legend-dot observed" />未過門檻</span>
+        {prediction.summary.alerts_before_limit > prediction.summary.action_count && (
+          <span><i className="legend-dot overflow-alert" />過門檻但清單額滿</span>
+        )}
+        <span><i className="legend-dot below-threshold" />30分鐘風險未達門檻</span>
         <span><i className="legend-dot unknown" />資料不足</span>
-        {reveal && <span><i className="legend-dot hit" />仍缺車</span>}
-        {reveal && <span><i className="legend-dot miss" />已恢復</span>}
+        {reveal && <span><i className="legend-dot still-empty" />仍缺車</span>}
+        {reveal && <span><i className="legend-dot recovered" />已恢復</span>}
         <span className="route-note"><Route size={14} />風險優先、鄰近串接；非實際派車指令</span>
       </div>
     </div>
@@ -611,8 +614,8 @@ export default function Home() {
                       </span>
                     </span>
                     <span className="risk-copy">
-                      {outcome === true && <CheckCircle2 size={15} className="outcome-hit" />}
-                      {outcome === false && <XCircle size={15} className="outcome-miss" />}
+                      {outcome === true && <AlertTriangle size={15} className="outcome-still-empty" />}
+                      {outcome === false && <CheckCircle2 size={15} className="outcome-recovered" />}
                       <strong>{riskText(station.risk_probability)}</strong>
                       <span>{outcome === true ? '仍為0車' : outcome === false ? '已恢復有車' : '持續風險'}</span>
                     </span>

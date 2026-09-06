@@ -123,10 +123,11 @@ button, select { font: inherit; }
 .station-marker text { fill: #06211e; font-size: 2.7px; font-weight: 800; }
 .station-marker .point { stroke-width: .55; transition: r .15s ease, stroke-width .15s ease; }
 .station-marker .point.action { fill: #ffbd59; stroke: #ffe0a4; }
-.station-marker .point.observed { fill: #cf536d; stroke: #ff9aad; opacity: .7; }
+.station-marker .point.overflow-alert { fill: #0a1d27; stroke: #ffbd59; stroke-width: 1.05; }
+.station-marker .point.below-threshold { fill: #738fd8; stroke: #b8c9ff; opacity: .76; }
 .station-marker .point.unknown { fill: #617681; stroke: #a7bac2; opacity: .78; }
-.station-marker .point.hit { fill: #43dda9; stroke: #b3ffe1; }
-.station-marker .point.miss { fill: #ff6886; stroke: #ffd0d9; }
+.station-marker .point.still-empty { fill: #ff6886; stroke: #ffd0d9; }
+.station-marker .point.recovered { fill: #43dda9; stroke: #b3ffe1; }
 .station-marker .point.selected { stroke: #ffffff; stroke-width: 1.15; }
 .map-popover { position: absolute; top: 14px; left: 14px; z-index: 2; display: grid; gap: 3px; max-width: 270px; padding: 10px 12px; border: 1px solid #315362; border-radius: 11px; background: #071821e8; box-shadow: 0 12px 28px #02090e80; backdrop-filter: blur(8px); }
 .map-popover span { color: #52dfca; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
@@ -136,10 +137,11 @@ button, select { font: inherit; }
 .map-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
 .legend-dot.action { background: #ffbd59; }
-.legend-dot.observed { background: #cf536d; }
+.legend-dot.overflow-alert { border: 2px solid #ffbd59; background: transparent; }
+.legend-dot.below-threshold { background: #738fd8; }
 .legend-dot.unknown { background: #617681; }
-.legend-dot.hit { background: #43dda9; }
-.legend-dot.miss { background: #ff6886; }
+.legend-dot.still-empty { background: #ff6886; }
+.legend-dot.recovered { background: #43dda9; }
 .route-note { margin-left: auto; }
 
 .action-panel { display: flex; flex-direction: column; }
@@ -156,8 +158,8 @@ button, select { font: inherit; }
 .risk-copy { position: relative; min-width: 58px; text-align: right; }
 .risk-copy strong { color: #ffca74; font-size: 14px; }
 .risk-copy svg { position: absolute; top: 0; left: -18px; }
-.outcome-hit { color: #43dda9; }
-.outcome-miss { color: #ff6886; }
+.outcome-still-empty { color: #ff6886; }
+.outcome-recovered { color: #43dda9; }
 .empty-actions { min-height: 300px; display: grid; place-content: center; justify-items: center; gap: 7px; color: #5cddc2; text-align: center; }
 .empty-actions strong { color: #dceef1; font-size: 13px; }
 .empty-actions span { max-width: 210px; color: #6e8a95; font-size: 11px; line-height: 1.55; }
