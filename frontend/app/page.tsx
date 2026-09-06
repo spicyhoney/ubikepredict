@@ -13,8 +13,10 @@ import {
   MapPinned,
   Navigation,
   Radio,
+  RotateCcw,
   Route,
   Sparkles,
+  Truck,
   TriangleAlert,
 } from 'lucide-react';
 
@@ -30,6 +32,9 @@ import {
 const API_BASE_URL = (
   process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000'
 ).replace(/\/+$/, '');
+
+const SHOW_DISPATCH_SIMULATION = true;
+const DEFAULT_DISPATCH_STOPS = 3;
 
 type PolicyId = 'balanced' | 'strict';
 type ModeId = 'empty' | 'full_dock';
@@ -354,11 +359,15 @@ function markerClass(station: Candidate, outcome: boolean | null) {
 function RiskMap({
   prediction,
   reveal,
+  simulationEnabled,
+  simulatedStationIds,
   selectedStationId,
   onSelectStation,
 }: {
   prediction: PredictionResponse;
   reveal: RevealResponse | null;
+  simulationEnabled: boolean;
+  simulatedStationIds: ReadonlySet<number>;
   selectedStationId: number | null;
   onSelectStation: (stationId: number) => void;
 }) {
@@ -372,13 +381,19 @@ function RiskMap({
     () => spreadActionPositions(basePositions, prediction.actions),
     [basePositions, prediction.actions],
   );
-  const routePoints = prediction.actions
+  const orderedActions = prediction.actions
     .slice()
-    .sort((left, right) => (left.route_order ?? 99) - (right.route_order ?? 99))
+    .sort((left, right) => (left.route_order ?? 99) - (right.route_order ?? 99));
+  const pointsFor = (stations: Candidate[]) => stations
     .map((station) => basePositions.get(station.station_id))
     .filter((position): position is { x: number; y: number } => Boolean(position))
     .map((position) => `${position.x},${position.y}`)
     .join(' ');
+  const routePoints = pointsFor(orderedActions);
+  const confirmedPersistent = reveal
+    ? orderedActions.filter((station) => outcomeFor(reveal, station.station_id, mode) === true)
+    : [];
+  const confirmedRoutePoints = pointsFor(confirmedPersistent);
   const selected = prediction.candidates.find((station) => station.station_id === selectedStationId);
 
   return (
@@ -413,8 +428,14 @@ function RiskMap({
             <path d="M86 5 C72 22, 91 48, 81 74" />
           </g>
           <text x="7" y="74" className="map-label">站點與路線採實際相對座標 · 密集編號已視覺避讓</text>
-          {routePoints && <polyline points={routePoints} className="route-halo" />}
-          {routePoints && <polyline points={routePoints} className="route-line" />}
+          {routePoints && <polyline points={routePoints} className={`route-halo${reveal ? ' revealed' : ''}`} />}
+          {routePoints && <polyline points={routePoints} className={`route-line${reveal ? ' revealed' : ''}`} />}
+          {confirmedPersistent.length > 1 && (
+            <polyline points={confirmedRoutePoints} className="confirmed-route-halo" />
+          )}
+          {confirmedPersistent.length > 1 && (
+            <polyline points={confirmedRoutePoints} className="confirmed-route-line" />
+          )}
           {prediction.candidates.map((station) => {
             const position = basePositions.get(station.station_id);
             if (!position) return null;
@@ -472,6 +493,12 @@ function RiskMap({
                   }}
                 >
                   <circle r="3.4" className="station-hit-target" />
+                  {simulationEnabled && simulatedStationIds.has(station.station_id) && (
+                    <circle
+                      r="3.05"
+                      className={`simulation-ring${outcome === true ? ' potential' : outcome === false ? ' recovered-stop' : ''}`}
+                    />
+                  )}
                   <circle
                     r="2.35"
                     className={`${markerClass(station, outcome)}${selectedClass}`}
@@ -501,7 +528,11 @@ function RiskMap({
         <span><i className="legend-dot unknown" />資料不足</span>
         {reveal && <span><i className="legend-dot still-empty" />{copy.positiveLegend}</span>}
         {reveal && <span><i className="legend-dot recovered" />{copy.recoveredOutcome}</span>}
-        <span className="route-note"><Route size={14} />#1最高風險，其後鄰近串接；非實際派車指令</span>
+        {simulationEnabled && <span><i className="legend-ring simulated" />納入情境模擬</span>}
+        <span className="route-note">
+          <Route size={14} />
+          {reveal ? '灰線為原建議；紅線為事後仍失衡站，不是當下可知路線' : '#1最高風險，其後鄰近串接；非實際派車指令'}
+        </span>
       </div>
     </div>
   );
@@ -607,7 +638,14 @@ export default function Home() {
   const [explainError, setExplainError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<MobileView>('map');
+  const [simulationEnabled, setSimulationEnabled] = useState(false);
+  const [dispatchStops, setDispatchStops] = useState(DEFAULT_DISPATCH_STOPS);
   const selectedStationIdRef = useRef<number | null>(null);
+
+  const resetSimulation = useCallback(() => {
+    setSimulationEnabled(false);
+    setDispatchStops(DEFAULT_DISPATCH_STOPS);
+  }, []);
 
   const selectStation = useCallback((stationId: number | null) => {
     if (selectedStationIdRef.current === stationId) return;
@@ -635,6 +673,7 @@ export default function Home() {
     setExplanation(null);
     setExplainError(null);
     setMobileView('map');
+    resetSimulation();
     selectStation(null);
     setScenarioId(requestedScenarioId);
     setPolicy(requestedPolicy);
@@ -671,7 +710,7 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, [selectStation]);
+  }, [resetSimulation, selectStation]);
 
   const loadModeAndPredict = useCallback(async (
     requestedMode: ModeId,
@@ -866,6 +905,40 @@ export default function Home() {
   const activeModeOption = modeOptions.find((item) => item.id === activeMode);
   const selectedStation =
     prediction?.candidates.find((station) => station.station_id === selectedStationId) ?? null;
+  const orderedActionStations = useMemo(
+    () => (prediction?.actions ?? [])
+      .slice()
+      .sort((left, right) => (left.route_order ?? 99) - (right.route_order ?? 99)),
+    [prediction],
+  );
+  const maxDispatchStops = Math.min(10, orderedActionStations.length);
+  const effectiveDispatchStops = Math.min(dispatchStops, maxDispatchStops);
+  const simulatedStops = useMemo(
+    () => simulationEnabled
+      ? orderedActionStations.slice(0, effectiveDispatchStops)
+      : [],
+    [effectiveDispatchStops, orderedActionStations, simulationEnabled],
+  );
+  const simulatedStationIds = useMemo(
+    () => new Set(simulatedStops.map((station) => station.station_id)),
+    [simulatedStops],
+  );
+  const potentialImproved = reveal
+    ? simulatedStops.filter(
+      (station) => outcomeFor(reveal, station.station_id, activeMode) === true,
+    ).length
+    : 0;
+  const alreadyRecovered = reveal
+    ? simulatedStops.filter(
+      (station) => outcomeFor(reveal, station.station_id, activeMode) === false,
+    ).length
+    : 0;
+  const unknownSimulationOutcomes = reveal
+    ? simulatedStops.length - potentialImproved - alreadyRecovered
+    : 0;
+  const remainingPersistentUpperBound = reveal
+    ? Math.max(0, reveal.summary.hits - potentialImproved)
+    : 0;
 
   return (
     <main className="app-shell">
@@ -1071,6 +1144,8 @@ export default function Home() {
             <RiskMap
               prediction={prediction}
               reveal={reveal}
+              simulationEnabled={simulationEnabled}
+              simulatedStationIds={simulatedStationIds}
               selectedStationId={selectedStationId}
               onSelectStation={selectStation}
             />
@@ -1117,6 +1192,81 @@ export default function Home() {
                   </div>
                 )}
               </div>
+              {SHOW_DISPATCH_SIMULATION && (
+                <section className={`dispatch-simulator${simulationEnabled ? ' active' : ''}`} aria-label="派車情境模擬">
+                  <div className="dispatch-simulator-heading">
+                    <span className="dispatch-icon"><Truck size={16} /></span>
+                    <div>
+                      <strong>派車情境模擬</strong>
+                      <small>畫面推估，不改模型或歷史答案</small>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="simulation-toggle"
+                      disabled={!prediction.actions.length}
+                      onClick={() => {
+                        if (simulationEnabled) {
+                          resetSimulation();
+                          return;
+                        }
+                        setDispatchStops(Math.min(DEFAULT_DISPATCH_STOPS, maxDispatchStops));
+                        setSimulationEnabled(true);
+                      }}
+                    >
+                      {simulationEnabled ? <RotateCcw size={14} /> : <Truck size={14} />}
+                      {simulationEnabled ? '關閉並重設' : '開始模擬'}
+                    </Button>
+                  </div>
+
+                  {simulationEnabled && (
+                    <div className="dispatch-simulator-body">
+                      <div className="dispatch-control-row">
+                        <label htmlFor="dispatch-stop-select">假設30分鐘內處理路線前</label>
+                        <Select
+                          value={String(effectiveDispatchStops)}
+                          onValueChange={(value) => setDispatchStops(Number(value))}
+                        >
+                          <SelectTrigger id="dispatch-stop-select" className="dispatch-stop-select">
+                            <SelectValue>{effectiveDispatchStops} 站</SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: maxDispatchStops }, (_, index) => index + 1).map((count) => (
+                              <SelectItem value={String(count)} key={count}>{count} 站</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {!reveal ? (
+                        <p className="simulation-pending">
+                          地圖藍圈已標出模擬處理站；先揭曉原始結果，才能估算潛在改善。
+                        </p>
+                      ) : (
+                        <div className="simulation-result">
+                          <p>
+                            歷史上行動清單有 <strong>{reveal.summary.hits}</strong> 站{copy.positiveLegend}；
+                            前{effectiveDispatchStops}站中有 <strong>{potentialImproved}</strong> 站原本會持續失衡。
+                          </p>
+                          <p>
+                            在準時到達且調度後狀態未再次被需求改變的假設下，
+                            <b>最多可能改善 {potentialImproved} 站，剩 {remainingPersistentUpperBound} 站。</b>
+                          </p>
+                          {(alreadyRecovered > 0 || unknownSimulationOutcomes > 0) && (
+                            <small>
+                              另有{alreadyRecovered}站歷史上自行恢復
+                              {unknownSimulationOutcomes > 0 ? `、${unknownSimulationOutcomes}站無法評估` : ''}，不計為模擬改善。
+                            </small>
+                          )}
+                        </div>
+                      )}
+                      <small className="simulation-disclaimer">
+                        情境推估上限，非實際派車成效；未計入車程、載量與介入後的新借還需求。上方命中率仍使用未介入的歷史真值。
+                      </small>
+                    </div>
+                  )}
+                </section>
+              )}
               <div className="panel-footer">
                 <Button
                   variant="outline"
