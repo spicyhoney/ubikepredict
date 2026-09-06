@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: YouBike persistent-empty prediction demo (private S3, Lambda containers, HTTP API, Amplify)
+Description: YouBike persistent-imbalance prediction demo (private S3, Lambda containers, HTTP API, Amplify)
 
 Parameters:
   StageName:
@@ -303,6 +303,10 @@ Resources:
                   - !Sub "arn:${AWS::Partition}:s3:::${RuntimeBucket}/releases/${ReleaseId}/config/final_policy_freeze_before_may.json"
                   - !Sub "arn:${AWS::Partition}:s3:::${RuntimeBucket}/releases/${ReleaseId}/config/protocol_frozen_before_june.json"
                   - !Sub "arn:${AWS::Partition}:s3:::${RuntimeBucket}/replays/2026-06/input/dynamic_red_empty_2026_06_input.parquet"
+                  - !Sub "arn:${AWS::Partition}:s3:::${RuntimeBucket}/releases/${ReleaseId}/model/lgbm_full_dock.txt"
+                  - !Sub "arn:${AWS::Partition}:s3:::${RuntimeBucket}/releases/${ReleaseId}/config/final_policy_freeze_full_dock_before_may.json"
+                  - !Sub "arn:${AWS::Partition}:s3:::${RuntimeBucket}/releases/${ReleaseId}/config/protocol_full_dock_frozen_before_june.json"
+                  - !Sub "arn:${AWS::Partition}:s3:::${RuntimeBucket}/replays/2026-06/input/dynamic_red_full_2026_06_input.parquet"
                   - !Sub "arn:${AWS::Partition}:s3:::${RuntimeBucket}/stations/dim_station.csv"
         - PolicyName: OwnLambdaLogs
           PolicyDocument:
@@ -341,7 +345,9 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: s3:GetObject
-                Resource: !Sub "arn:${AWS::Partition}:s3:::${TruthBucket}/replays/2026-06/truth/june_all_eligible_decisions.parquet"
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:s3:::${TruthBucket}/replays/2026-06/truth/june_all_eligible_decisions.parquet"
+                  - !Sub "arn:${AWS::Partition}:s3:::${TruthBucket}/replays/2026-06/truth/june_full_dock_all_eligible_decisions.parquet"
         - PolicyName: OwnLambdaLogs
           PolicyDocument:
             Version: "2012-10-17"

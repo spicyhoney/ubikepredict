@@ -71,8 +71,17 @@ if ($Health.status -ne "ok") {
     throw "Health endpoint did not return status=ok."
 }
 $null = Invoke-RestMethod -Method Get -Uri "$BaseUrl/api/options" -Headers $Headers -TimeoutSec 30
+$FullDockOptions = Invoke-RestMethod `
+    -Method Get `
+    -Uri "$BaseUrl/api/options?mode=full_dock" `
+    -Headers $Headers `
+    -TimeoutSec 30
+if ([string]$FullDockOptions.mode -ne "full_dock") {
+    throw "Full-dock options did not return mode=full_dock."
+}
 
 $PredictBody = @{
+    mode = "empty"
     decision_time = "2026-06-29T09:00:00+08:00"
     district = "三重區"
     policy = "balanced"
@@ -131,6 +140,7 @@ if ($RequireBedrock -and $SummaryProvider -ne "amazon_bedrock") {
     throw "Bedrock was required, but the explanation used '$SummaryProvider' (fallback: '$FallbackReason')."
 }
 $RevealBody = @{
+    mode = "empty"
     decision_time = [string]$Prediction.decision_time
     station_ids = $StationIds
 } | ConvertTo-Json -Depth 4
@@ -146,6 +156,94 @@ if ([int]$Reveal.summary.evaluated_actions -ne 10 -or [int]$Reveal.summary.hits 
 }
 if ([math]::Abs([double]$Reveal.summary.precision - 0.7) -gt 0.000000001) {
     throw "Reveal precision mismatch. Expected 0.7."
+}
+
+# Auxiliary full-dock mode uses the same endpoints and deployment.  Its
+# representative replay is intentionally modest: two alerts and one hit.
+$FullDockPredictBody = @{
+    mode = "full_dock"
+    decision_time = "2026-06-25T08:00:00+08:00"
+    district = "板橋區"
+    policy = "balanced"
+    action_limit = 10
+} | ConvertTo-Json
+$FullDockPrediction = Invoke-RestMethod `
+    -Method Post `
+    -Uri "$BaseUrl/api/predict" `
+    -Headers $Headers `
+    -ContentType "application/json; charset=utf-8" `
+    -Body $FullDockPredictBody `
+    -TimeoutSec 30
+if ([string]$FullDockPrediction.mode -ne "full_dock") {
+    throw "Full-dock prediction mode mismatch."
+}
+$FullDockExpectedSummary = @{
+    current_full_dock = 6
+    scored_current_full_dock = 6
+    alerts_before_limit = 2
+    action_count = 2
+}
+foreach ($Name in $FullDockExpectedSummary.Keys) {
+    if ([int]$FullDockPrediction.summary.$Name -ne $FullDockExpectedSummary[$Name]) {
+        throw "Full-dock summary mismatch for $Name. Expected $($FullDockExpectedSummary[$Name]), got $($FullDockPrediction.summary.$Name)."
+    }
+}
+$FullDockStationIds = @(
+    $FullDockPrediction.actions | ForEach-Object { [int]$_.station_id }
+)
+if ($FullDockStationIds.Count -ne 2 -or
+    ($FullDockStationIds | Sort-Object -Unique).Count -ne 2) {
+    throw "Full-dock action list must contain 2 unique station IDs."
+}
+$FullDockExplainBody = @{
+    mode = "full_dock"
+    decision_time = [string]$FullDockPrediction.decision_time
+    district = "板橋區"
+    station_id = $FullDockStationIds[0]
+    policy = "balanced"
+    action_limit = 10
+} | ConvertTo-Json
+$FullDockExplanation = Invoke-RestMethod `
+    -Method Post `
+    -Uri "$BaseUrl/api/explain" `
+    -Headers $Headers `
+    -ContentType "application/json; charset=utf-8" `
+    -Body $FullDockExplainBody `
+    -TimeoutSec 30
+if ([string]$FullDockExplanation.mode -ne "full_dock" -or
+    [int]$FullDockExplanation.station.station_id -ne $FullDockStationIds[0]) {
+    throw "Full-dock explanation mode or station mismatch."
+}
+if ([math]::Abs([double]$FullDockExplanation.shap.sum_error) -gt 0.000001) {
+    throw "Full-dock SHAP contributions do not reconstruct the LightGBM raw score."
+}
+$FullDockProvider = [string]$FullDockExplanation.operational_summary.provider
+if ($FullDockProvider -notin @("template", "amazon_bedrock")) {
+    throw "Unexpected full-dock explanation provider '$FullDockProvider'."
+}
+if ($RequireBedrock -and $FullDockProvider -ne "amazon_bedrock") {
+    $FullDockFallback = [string]$FullDockExplanation.operational_summary.fallback_reason
+    throw "Bedrock was required for full_dock, but provider was '$FullDockProvider' (fallback: '$FullDockFallback')."
+}
+$FullDockRevealBody = @{
+    mode = "full_dock"
+    decision_time = [string]$FullDockPrediction.decision_time
+    station_ids = $FullDockStationIds
+} | ConvertTo-Json -Depth 4
+$FullDockReveal = Invoke-RestMethod `
+    -Method Post `
+    -Uri "$BaseUrl/api/reveal" `
+    -Headers $Headers `
+    -ContentType "application/json; charset=utf-8" `
+    -Body $FullDockRevealBody `
+    -TimeoutSec 30
+if ([string]$FullDockReveal.mode -ne "full_dock" -or
+    [int]$FullDockReveal.summary.evaluated_actions -ne 2 -or
+    [int]$FullDockReveal.summary.hits -ne 1) {
+    throw "Full-dock reveal mismatch. Expected 1 hit from 2 evaluated actions."
+}
+if ([math]::Abs([double]$FullDockReveal.summary.precision - 0.5) -gt 0.000000001) {
+    throw "Full-dock reveal precision mismatch. Expected 0.5."
 }
 
 if (-not [string]::IsNullOrWhiteSpace($Origin)) {
@@ -195,6 +293,29 @@ if (-not [string]::IsNullOrWhiteSpace($LocalBaseUrl)) {
             throw "Cloud/local probability mismatch for station $Key`: $Difference exceeds $ProbabilityTolerance."
         }
     }
+
+    $LocalFullDockPrediction = Invoke-RestMethod `
+        -Method Post `
+        -Uri "$LocalBaseUrl/api/predict" `
+        -ContentType "application/json; charset=utf-8" `
+        -Body $FullDockPredictBody `
+        -TimeoutSec 30
+    $LocalFullDockByStation = @{}
+    foreach ($Action in $LocalFullDockPrediction.actions) {
+        $LocalFullDockByStation[[string]$Action.station_id] = [double]$Action.risk_probability
+    }
+    foreach ($Action in $FullDockPrediction.actions) {
+        $Key = [string]$Action.station_id
+        if (-not $LocalFullDockByStation.ContainsKey($Key)) {
+            throw "Full-dock cloud/local parity mismatch: station $Key is absent locally."
+        }
+        $Difference = [math]::Abs(
+            [double]$Action.risk_probability - $LocalFullDockByStation[$Key]
+        )
+        if ($Difference -gt $ProbabilityTolerance) {
+            throw "Full-dock cloud/local probability mismatch for station $Key`: $Difference exceeds $ProbabilityTolerance."
+        }
+    }
 }
 
-Write-Host "Cloud verification passed: health, options, 12-to-Top-10 prediction, SHAP/summary, 7/10 reveal, optional Amplify/CORS, and optional parity checks."
+Write-Host "Cloud verification passed: empty 12-to-Top-10 and 7/10 reveal; full_dock 2 alerts and 1/2 reveal; both SHAP/summaries; optional Amplify/CORS and parity checks."

@@ -1,5 +1,7 @@
 [CmdletBinding()]
 param(
+    [ValidateSet("empty", "full_dock")]
+    [string]$Mode = "empty",
     [string]$Datetime = "2026-06-23 19:30:00",
     [string]$District = "",
     [ValidateSet("balanced", "strict", "all")]
@@ -18,6 +20,7 @@ if (-not (Test-Path -LiteralPath $Python)) {
 }
 $Arguments = @(
     (Join-Path $RepoRoot "backend\inference.py"),
+    "--mode", $Mode,
     "--datetime", $Datetime,
     "--policy", $Policy,
     "--top", $Top,

@@ -113,11 +113,16 @@ if ($LocalDevelopmentOrigin -notmatch "^https?://[^/]+$") {
 
 $RequiredAssets = @(
     "model\lgbm_full.txt",
+    "model\lgbm_full_dock.txt",
     "config\final_policy_freeze_before_may.json",
+    "config\final_policy_freeze_full_dock_before_may.json",
     "config\protocol_frozen_before_june.json",
+    "config\protocol_full_dock_frozen_before_june.json",
     "data\source\dynamic_red_empty_2026_06_input.parquet",
+    "data\source\dynamic_red_full_2026_06_input.parquet",
     "data\stations\dim_station.csv",
-    "data\reference\june_all_eligible_decisions.parquet"
+    "data\reference\june_all_eligible_decisions.parquet",
+    "data\reference\june_full_dock_all_eligible_decisions.parquet"
 )
 foreach ($RelativePath in $RequiredAssets) {
     $FullPath = Join-Path $RepoRoot $RelativePath
@@ -127,11 +132,16 @@ foreach ($RelativePath in $RequiredAssets) {
 }
 
 $ModelKey = "releases/$ReleaseId/model/lgbm_full.txt"
+$FullDockModelKey = "releases/$ReleaseId/model/lgbm_full_dock.txt"
 $FreezeKey = "releases/$ReleaseId/config/final_policy_freeze_before_may.json"
+$FullDockFreezeKey = "releases/$ReleaseId/config/final_policy_freeze_full_dock_before_may.json"
 $ProtocolKey = "releases/$ReleaseId/config/protocol_frozen_before_june.json"
+$FullDockProtocolKey = "releases/$ReleaseId/config/protocol_full_dock_frozen_before_june.json"
 $InputKey = "replays/2026-06/input/dynamic_red_empty_2026_06_input.parquet"
+$FullDockInputKey = "replays/2026-06/input/dynamic_red_full_2026_06_input.parquet"
 $StationsKey = "stations/dim_station.csv"
 $TruthKey = "replays/2026-06/truth/june_all_eligible_decisions.parquet"
+$FullDockTruthKey = "replays/2026-06/truth/june_full_dock_all_eligible_decisions.parquet"
 
 $ParameterOverrides = @(
     "ParameterKey=StageName,ParameterValue=$StageName",
@@ -166,8 +176,8 @@ if ($DryRun) {
     Write-Host "Stack: $StackName"
     Write-Host "Region: $Region"
     Write-Host "Bedrock enabled: $($EnableBedrock.IsPresent)"
-    Write-Host "Planned runtime objects: $ModelKey, $FreezeKey, $ProtocolKey, $InputKey, $StationsKey"
-    Write-Host "Planned truth object: $TruthKey"
+    Write-Host "Planned runtime objects: $ModelKey, $FreezeKey, $ProtocolKey, $InputKey, $FullDockModelKey, $FullDockFreezeKey, $FullDockProtocolKey, $FullDockInputKey, $StationsKey"
+    Write-Host "Planned truth objects: $TruthKey, $FullDockTruthKey"
     Write-Host "Planned flow: SAM build/deploy -> exact S3 uploads -> static frontend package -> Amplify manual deployment -> cloud verification."
     exit 0
 }
@@ -220,11 +230,16 @@ if (-not $SkipAssetUpload) {
     Write-Host "Uploading frozen runtime assets and held-out truth to separate private buckets..."
     $Uploads = @(
         @{ Local = "model\lgbm_full.txt"; Bucket = $RuntimeBucket; Key = $ModelKey },
+        @{ Local = "model\lgbm_full_dock.txt"; Bucket = $RuntimeBucket; Key = $FullDockModelKey },
         @{ Local = "config\final_policy_freeze_before_may.json"; Bucket = $RuntimeBucket; Key = $FreezeKey },
+        @{ Local = "config\final_policy_freeze_full_dock_before_may.json"; Bucket = $RuntimeBucket; Key = $FullDockFreezeKey },
         @{ Local = "config\protocol_frozen_before_june.json"; Bucket = $RuntimeBucket; Key = $ProtocolKey },
+        @{ Local = "config\protocol_full_dock_frozen_before_june.json"; Bucket = $RuntimeBucket; Key = $FullDockProtocolKey },
         @{ Local = "data\source\dynamic_red_empty_2026_06_input.parquet"; Bucket = $RuntimeBucket; Key = $InputKey },
+        @{ Local = "data\source\dynamic_red_full_2026_06_input.parquet"; Bucket = $RuntimeBucket; Key = $FullDockInputKey },
         @{ Local = "data\stations\dim_station.csv"; Bucket = $RuntimeBucket; Key = $StationsKey },
-        @{ Local = "data\reference\june_all_eligible_decisions.parquet"; Bucket = $TruthBucket; Key = $TruthKey }
+        @{ Local = "data\reference\june_all_eligible_decisions.parquet"; Bucket = $TruthBucket; Key = $TruthKey },
+        @{ Local = "data\reference\june_full_dock_all_eligible_decisions.parquet"; Bucket = $TruthBucket; Key = $FullDockTruthKey }
     )
     foreach ($Upload in $Uploads) {
         Invoke-AwsCommand @(

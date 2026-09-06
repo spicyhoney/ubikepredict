@@ -96,6 +96,59 @@ class DemoServiceTest(unittest.TestCase):
     def test_prediction_input_is_physically_truth_free(self) -> None:
         self.assertTrue(AUDIT_ONLY_COLUMNS.isdisjoint(self.service.current_peak.columns))
         self.assertTrue(AUDIT_ONLY_COLUMNS.isdisjoint(self.service.eligible.columns))
+        self.assertTrue(
+            AUDIT_ONLY_COLUMNS.isdisjoint(self.service.current_peak_by_mode["full_dock"].columns)
+        )
+        self.assertTrue(
+            AUDIT_ONLY_COLUMNS.isdisjoint(self.service.eligible_by_mode["full_dock"].columns)
+        )
+
+    def test_full_dock_mode_uses_independent_model_and_truth(self) -> None:
+        options = self.service.options(mode="full_dock")
+        self.assertEqual(options["mode"], "full_dock")
+        self.assertEqual(options["default"]["mode"], "full_dock")
+        self.assertEqual(options["default"]["district"], "板橋區")
+        self.assertAlmostEqual(options["policies"][0]["threshold"], 0.42059604096412656)
+
+        prediction = self.service.predict(
+            {
+                "mode": "full_dock",
+                "decision_time": "2026-06-25T08:00:00+08:00",
+                "district": "板橋區",
+                "policy": "balanced",
+                "action_limit": 10,
+            }
+        )
+        self.assertEqual(prediction["mode"], "full_dock")
+        self.assertEqual(prediction["summary"]["current_full_dock"], 6)
+        self.assertEqual(prediction["summary"]["scored_current_full_dock"], 6)
+        self.assertEqual(prediction["summary"]["alerts_before_limit"], 2)
+        self.assertEqual(prediction["summary"]["action_count"], 2)
+
+        outcome = self.service.reveal(
+            {
+                "mode": "full_dock",
+                "decision_time": prediction["decision_time"],
+                "station_ids": [row["station_id"] for row in prediction["actions"]],
+            }
+        )
+        self.assertEqual(outcome["mode"], "full_dock")
+        self.assertEqual(outcome["summary"], {"evaluated_actions": 2, "hits": 1, "precision": 0.5})
+        self.assertTrue(all("still_full_dock" in row for row in outcome["results"]))
+
+        explanation = self.service.explain(
+            {
+                "mode": "full_dock",
+                "decision_time": prediction["decision_time"],
+                "district": prediction["district"],
+                "station_id": prediction["actions"][0]["station_id"],
+                "policy": "balanced",
+                "action_limit": 10,
+            }
+        )
+        self.assertEqual(explanation["mode"], "full_dock")
+        self.assertIn("滿柱", explanation["operational_summary"]["text"])
+        self.assertNotIn("仍缺車風險", explanation["operational_summary"]["text"])
 
     def test_explain_uses_model_inputs_without_loading_truth(self) -> None:
         prediction = self.service.predict(

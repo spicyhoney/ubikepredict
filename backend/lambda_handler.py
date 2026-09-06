@@ -294,7 +294,8 @@ def _dispatch_prediction(
         return _json_response(event, _prediction_health(_get_prediction_service()))
     if method == "GET" and path == "/api/options":
         requested = _query_parameter(event, "decision_time")
-        return _json_response(event, _get_prediction_service().options(requested))
+        mode = _query_parameter(event, "mode") or "empty"
+        return _json_response(event, _get_prediction_service().options(requested, mode=mode))
     if method == "POST" and path == "/api/predict":
         payload = _read_payload(event)
         return _json_response(event, _get_prediction_service().predict(payload))

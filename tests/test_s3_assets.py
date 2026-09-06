@@ -48,10 +48,30 @@ class S3AssetLoaderTest(unittest.TestCase):
 
     def test_builtin_manifest_separates_truth_from_prediction(self) -> None:
         self.assertEqual(set(PREDICTION_ASSETS), {
-            "model", "freeze", "protocol", "input", "stations"
+            "model",
+            "freeze",
+            "protocol",
+            "input",
+            "full_dock_model",
+            "full_dock_freeze",
+            "full_dock_protocol",
+            "full_dock_input",
+            "stations",
         })
-        self.assertEqual(REVEAL_ASSETS, ("truth",))
+        self.assertEqual(set(REVEAL_ASSETS), {"truth", "full_dock_truth"})
         self.assertTrue(all(MANIFEST[name].scope == "prediction" for name in PREDICTION_ASSETS))
+        self.assertTrue(all(MANIFEST[name].scope == "reveal" for name in REVEAL_ASSETS))
+
+    def test_deployment_allow_lists_every_manifest_asset(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        template = (root / "infra/template.yaml").read_text(encoding="utf-8")
+        deploy_script = (root / "scripts/deploy-aws.ps1").read_text(encoding="utf-8")
+        for spec in MANIFEST.values():
+            cloudformation_key = spec.s3_key_template.replace(
+                "{release_id}", "${ReleaseId}"
+            )
+            self.assertIn(cloudformation_key, template)
+            self.assertIn(spec.relative_path.replace("/", "\\"), deploy_script)
 
     def test_download_verifies_and_reuses_valid_cache(self) -> None:
         content = b"frozen model bytes"

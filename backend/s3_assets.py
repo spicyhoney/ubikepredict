@@ -90,6 +90,48 @@ MANIFEST: Mapping[str, AssetSpec] = {
         env_var="UBIKE_API_INPUT_PATH",
         scope="prediction",
     ),
+    "full_dock_model": AssetSpec(
+        name="full_dock_model",
+        relative_path="model/lgbm_full_dock.txt",
+        s3_key_template="releases/{release_id}/model/lgbm_full_dock.txt",
+        bytes=532_851,
+        sha256="730bb702e8c412c66311f046f37d45f8af0c8fc188c6df684b3f7a3fb033a063",
+        env_var="UBIKE_FULL_DOCK_MODEL_PATH",
+        scope="prediction",
+    ),
+    "full_dock_freeze": AssetSpec(
+        name="full_dock_freeze",
+        relative_path="config/final_policy_freeze_full_dock_before_may.json",
+        s3_key_template=(
+            "releases/{release_id}/config/final_policy_freeze_full_dock_before_may.json"
+        ),
+        bytes=28_347,
+        sha256="02fde25d6833d046ad92c6325e6ac60cc8659ec78c09e51759c48789722e0694",
+        env_var="UBIKE_FULL_DOCK_FREEZE_PATH",
+        scope="prediction",
+    ),
+    "full_dock_protocol": AssetSpec(
+        name="full_dock_protocol",
+        relative_path="config/protocol_full_dock_frozen_before_june.json",
+        s3_key_template=(
+            "releases/{release_id}/config/protocol_full_dock_frozen_before_june.json"
+        ),
+        bytes=21_081,
+        sha256="dc5cee1e9db099bda81918a218a65c61f3878b95b53651b5611b98efd601da5f",
+        env_var="UBIKE_FULL_DOCK_PROTOCOL_PATH",
+        scope="prediction",
+    ),
+    "full_dock_input": AssetSpec(
+        name="full_dock_input",
+        relative_path="data/source/dynamic_red_full_2026_06_input.parquet",
+        s3_key_template=(
+            "replays/2026-06/input/dynamic_red_full_2026_06_input.parquet"
+        ),
+        bytes=507_827,
+        sha256="0bfb7fcf13c7f4e1bc0448ab670d6ef89d4f27e849080b91a850557c2fa7774b",
+        env_var="UBIKE_FULL_DOCK_API_INPUT_PATH",
+        scope="prediction",
+    ),
     "stations": AssetSpec(
         name="stations",
         relative_path="data/stations/dim_station.csv",
@@ -108,6 +150,17 @@ MANIFEST: Mapping[str, AssetSpec] = {
         bytes=500_714,
         sha256="5f725b36965e41026679772dd60d79734e939b7a17025b6623f8385727660385",
         env_var="UBIKE_REFERENCE_PATH",
+        scope="reveal",
+    ),
+    "full_dock_truth": AssetSpec(
+        name="full_dock_truth",
+        relative_path="data/reference/june_full_dock_all_eligible_decisions.parquet",
+        s3_key_template=(
+            "replays/2026-06/truth/june_full_dock_all_eligible_decisions.parquet"
+        ),
+        bytes=92_366,
+        sha256="e89486879bd6bd8e7872b69da6890c51c2b0b864cbead01c9db1f509b453d73f",
+        env_var="UBIKE_FULL_DOCK_REFERENCE_PATH",
         scope="reveal",
     ),
 }

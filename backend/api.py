@@ -29,6 +29,7 @@ from backend.inference import (
     AUDIT_ONLY_COLUMNS,
     JULY_START,
     JUNE_START,
+    SUPPORTED_MODES,
     FrozenYouBikeModel,
     load_demo_source,
     select_eligible_june,
@@ -53,13 +54,13 @@ ALLOWED_ORIGINS = {
     if origin.strip()
 }
 
-SCENARIOS = [
+EMPTY_SCENARIOS = [
     {
         "id": "representative",
         "label": "代表案例 · 三重早尖峰",
         "decision_time": "2026-06-29T09:00:00+08:00",
         "district": "三重區",
-        "note": "同時包含命中與誤報，適合展示完整的歷史回放流程。",
+        "note": "站點數適中，適合展示從預測到揭曉的完整歷史回放流程。",
     },
     {
         "id": "high_load",
@@ -73,7 +74,7 @@ SCENARIOS = [
         "label": "寫實案例 · 板橋晚尖峰",
         "decision_time": "2026-06-10T19:30:00+08:00",
         "district": "板橋區",
-        "note": "同時包含命中與誤報，呈現模型的真實限制。",
+        "note": "板橋晚尖峰案例，可用來觀察模型在不同時段的表現。",
     },
     {
         "id": "weekend",
@@ -90,6 +91,84 @@ SCENARIOS = [
         "note": "另一個板橋晚尖峰時點，可用來比較不同日期的結果。",
     },
 ]
+
+FULL_DOCK_SCENARIOS = [
+    {
+        "id": "full_representative",
+        "label": "代表案例 · 板橋早尖峰",
+        "decision_time": "2026-06-25T08:00:00+08:00",
+        "district": "板橋區",
+        "note": "站點數適中，適合展示滿柱持續風險的完整回放流程。",
+    },
+    {
+        "id": "full_success",
+        "label": "補充案例 · 板橋早尖峰",
+        "decision_time": "2026-06-04T07:30:00+08:00",
+        "district": "板橋區",
+        "note": "另一個板橋早尖峰時點，可用來比較不同日期的預測結果。",
+    },
+    {
+        "id": "full_challenging",
+        "label": "時序案例 · 板橋早尖峰",
+        "decision_time": "2026-06-04T08:00:00+08:00",
+        "district": "板橋區",
+        "note": "緊接前一個案例的下一時點，可觀察動態決策如何更新。",
+    },
+    {
+        "id": "full_evening",
+        "label": "晚尖峰 · 淡水",
+        "decision_time": "2026-06-12T17:30:00+08:00",
+        "district": "淡水區",
+        "note": "淡水晚尖峰案例，可觀察不同時段與區域的預測表現。",
+    },
+    {
+        "id": "full_weekend",
+        "label": "週末案例 · 萬里",
+        "decision_time": "2026-06-20T16:00:00+08:00",
+        "district": "萬里區",
+        "note": "週末萬里案例，用於確認不同區域仍能執行完整流程。",
+    },
+]
+
+SCENARIOS_BY_MODE = {
+    "empty": EMPTY_SCENARIOS,
+    "full_dock": FULL_DOCK_SCENARIOS,
+}
+# Backward-compatible import used by existing tests and notebooks.
+SCENARIOS = EMPTY_SCENARIOS
+MODE_OPTIONS = [
+    {
+        "id": "empty",
+        "label": "缺車持續（主要）",
+        "description": "預測當下0車站點在30分鐘後是否仍無車可借。",
+    },
+    {
+        "id": "full_dock",
+        "label": "滿柱持續（輔助）",
+        "description": "預測當下0空位站點在30分鐘後是否仍無位可還。",
+    },
+]
+MODE_COPY = {
+    "empty": {
+        "event": "缺車",
+        "state": "0車",
+        "outcome": "仍缺車",
+        "recovery": "已恢復可借",
+    },
+    "full_dock": {
+        "event": "滿柱",
+        "state": "0空位",
+        "outcome": "仍滿柱",
+        "recovery": "已恢復空位",
+    },
+}
+
+
+def _mode(value: Any) -> str:
+    mode = str(value or "empty").strip()
+    if mode not in SUPPORTED_MODES:
+        raise ValueError("mode 必須是 empty 或 full_dock")
+    return mode
 
 
 def _local_timestamp(value: Any) -> pd.Timestamp:
@@ -121,12 +200,12 @@ def _safe_text(value: Any, fallback: str) -> str:
     return text or fallback
 
 
-def _duration_text(steps: Any) -> str:
+def _duration_text(steps: Any, mode: str = "empty") -> str:
     if steps is None or pd.isna(steps):
         return "歷史長度不足"
     value = int(steps)
     if value <= 0:
-        return "首次觀察缺車"
+        return f"首次觀察{MODE_COPY[mode]['event']}"
     if value >= 3:
         return "已持續90分鐘以上"
     return f"已持續{value * 30}分鐘"
@@ -167,88 +246,143 @@ def _risk_first_nearest_route(rows: list[dict[str, Any]]) -> list[dict[str, Any]
 
 class DemoService:
     def __init__(self) -> None:
-        self.engine = FrozenYouBikeModel()
-        self.api_input_path = _configured_path(
-            "UBIKE_API_INPUT_PATH",
-            "data/source/dynamic_red_empty_2026_06_input.parquet",
-        )
-        self.reference_path = _configured_path(
-            "UBIKE_REFERENCE_PATH",
-            "data/reference/june_all_eligible_decisions.parquet",
-        )
-        source = load_demo_source(self.api_input_path)
-        leaked_columns = AUDIT_ONLY_COLUMNS.intersection(source.columns)
-        if leaked_columns:
-            raise RuntimeError(f"Demo input contains audit-only columns: {sorted(leaked_columns)}")
-        station_fields = self.engine.stations[
-            ["station_id", "station_name", "district"]
-        ]
-        peak_mask = (
-            source["decision_is_peak"].eq(1)
-            & source["datetime"].ge(JUNE_START)
-            & source["datetime"].lt(JULY_START)
-            & source["target_datetime"].lt(JULY_START)
-        )
-        self.current_peak = source.loc[peak_mask].merge(
-            station_fields, on="station_id", how="left", validate="many_to_one"
-        )
-        self.eligible = select_eligible_june(source)
+        self.engines = {
+            mode: FrozenYouBikeModel(mode=mode) for mode in SUPPORTED_MODES
+        }
+        self.api_input_paths = {
+            "empty": _configured_path(
+                "UBIKE_API_INPUT_PATH",
+                "data/source/dynamic_red_empty_2026_06_input.parquet",
+            ),
+            "full_dock": _configured_path(
+                "UBIKE_FULL_DOCK_API_INPUT_PATH",
+                "data/source/dynamic_red_full_2026_06_input.parquet",
+            ),
+        }
+        self.reference_paths = {
+            "empty": _configured_path(
+                "UBIKE_REFERENCE_PATH",
+                "data/reference/june_all_eligible_decisions.parquet",
+            ),
+            "full_dock": _configured_path(
+                "UBIKE_FULL_DOCK_REFERENCE_PATH",
+                "data/reference/june_full_dock_all_eligible_decisions.parquet",
+            ),
+        }
+        self.current_peak_by_mode: dict[str, pd.DataFrame] = {}
+        self.eligible_by_mode: dict[str, pd.DataFrame] = {}
+        self.decision_times_by_mode: dict[str, list[pd.Timestamp]] = {}
+        self.districts_by_mode_time: dict[str, dict[pd.Timestamp, list[dict[str, Any]]]] = {}
+        for mode, engine in self.engines.items():
+            source = load_demo_source(self.api_input_paths[mode], mode=mode)
+            leaked_columns = AUDIT_ONLY_COLUMNS.intersection(source.columns)
+            if leaked_columns:
+                raise RuntimeError(
+                    f"Demo input for {mode} contains audit-only columns: {sorted(leaked_columns)}"
+                )
+            station_fields = engine.stations[["station_id", "station_name", "district"]]
+            peak_mask = (
+                source["decision_is_peak"].eq(1)
+                & source["datetime"].ge(JUNE_START)
+                & source["datetime"].lt(JULY_START)
+                & source["target_datetime"].lt(JULY_START)
+            )
+            current_peak = source.loc[peak_mask].merge(
+                station_fields, on="station_id", how="left", validate="many_to_one"
+            )
+            eligible = select_eligible_june(source)
+            self.current_peak_by_mode[mode] = current_peak
+            self.eligible_by_mode[mode] = eligible
+            self.decision_times_by_mode[mode] = sorted(
+                eligible["datetime"].drop_duplicates().tolist()
+            )
+            districts_by_time: dict[pd.Timestamp, list[dict[str, Any]]] = {}
+            for decision_time, frame in current_peak.groupby("datetime", sort=True):
+                counts = (
+                    frame.dropna(subset=["district"])
+                    .groupby("district", sort=True)
+                    .size()
+                    .rename("current_imbalance_count")
+                    .reset_index()
+                )
+                districts_by_time[pd.Timestamp(decision_time)] = [
+                    {
+                        "district": str(row.district),
+                        "current_imbalance_count": int(row.current_imbalance_count),
+                        # Kept for clients created before the mode API.
+                        "current_empty_count": int(row.current_imbalance_count),
+                    }
+                    for row in counts.itertuples(index=False)
+                ]
+            self.districts_by_mode_time[mode] = districts_by_time
+
+        # Backward-compatible aliases keep older scripts/tests defaulting to empty.
+        self.engine = self.engines["empty"]
+        self.api_input_path = self.api_input_paths["empty"]
+        self.reference_path = self.reference_paths["empty"]
+        self.current_peak = self.current_peak_by_mode["empty"]
+        self.eligible = self.eligible_by_mode["empty"]
+        self.decision_times = self.decision_times_by_mode["empty"]
+        self.districts_by_time = self.districts_by_mode_time["empty"]
         self._reference: pd.DataFrame | None = None
+        self._references: dict[str, pd.DataFrame] = {}
         self.summary_service = BedrockSummaryService()
         self._explain_cache: dict[
-            tuple[int, str, int, str, int], tuple[float, dict[str, Any]]
+            tuple[str, int, str, int, str, int], tuple[float, dict[str, Any]]
         ] = {}
         self._explain_cache_lock = threading.Lock()
-
-        self.decision_times = sorted(self.eligible["datetime"].drop_duplicates().tolist())
-        self.districts_by_time: dict[pd.Timestamp, list[dict[str, Any]]] = {}
-        for decision_time, frame in self.current_peak.groupby("datetime", sort=True):
-            counts = (
-                frame.dropna(subset=["district"])
-                .groupby("district", sort=True)
-                .size()
-                .rename("current_empty_count")
-                .reset_index()
-            )
-            self.districts_by_time[pd.Timestamp(decision_time)] = [
-                {"district": str(row.district), "current_empty_count": int(row.current_empty_count)}
-                for row in counts.itertuples(index=False)
-            ]
 
     @property
     def reference(self) -> pd.DataFrame:
         if self._reference is None:
-            self._reference = pd.read_parquet(
-                self.reference_path,
-                columns=["datetime", "target_datetime", "station_id", "y_same_30"],
-            )
-            self._reference["datetime"] = pd.to_datetime(self._reference["datetime"])
-            self._reference["target_datetime"] = pd.to_datetime(self._reference["target_datetime"])
+            self._reference = self._load_reference("empty")
         return self._reference
 
-    def options(self, requested_time: Any | None = None) -> dict[str, Any]:
-        default = SCENARIOS[0]
+    def _load_reference(self, mode: str) -> pd.DataFrame:
+        reference = pd.read_parquet(
+            self.reference_paths[mode],
+            columns=["datetime", "target_datetime", "station_id", "y_same_30"],
+        )
+        reference["datetime"] = pd.to_datetime(reference["datetime"])
+        reference["target_datetime"] = pd.to_datetime(reference["target_datetime"])
+        return reference
+
+    def reference_for(self, mode: str) -> pd.DataFrame:
+        if mode == "empty":
+            return self.reference
+        if mode not in self._references:
+            self._references[mode] = self._load_reference(mode)
+        return self._references[mode]
+
+    def options(self, requested_time: Any | None = None, mode: str = "empty") -> dict[str, Any]:
+        mode = _mode(mode)
+        scenarios = SCENARIOS_BY_MODE[mode]
+        default = scenarios[0]
         decision_time = _local_timestamp(requested_time or default["decision_time"])
+        engine = self.engines[mode]
         return {
+            "mode": mode,
+            "modes": MODE_OPTIONS,
             "timezone": TAIPEI_TIMEZONE,
-            "decision_times": [_iso_taipei(value) for value in self.decision_times],
-            "districts": self.districts_by_time.get(decision_time, []),
+            "decision_times": [_iso_taipei(value) for value in self.decision_times_by_mode[mode]],
+            "districts": self.districts_by_mode_time[mode].get(decision_time, []),
             "policies": [
                 {
                     "id": "balanced",
                     "label": "平衡模式",
-                    "threshold": self.engine.balanced_threshold,
-                    "description": "保留較多值得關注的持續缺車候選。",
+                    "threshold": engine.balanced_threshold,
+                    "description": f"保留較多值得關注的持續{MODE_COPY[mode]['event']}候選。",
                 },
                 {
                     "id": "strict",
                     "label": "嚴格模式",
-                    "threshold": self.engine.strict_threshold,
+                    "threshold": engine.strict_threshold,
                     "description": "減少警示數量，只保留更高機率站點。",
                 },
             ],
-            "scenarios": SCENARIOS,
+            "scenarios": scenarios,
             "default": {
+                "mode": mode,
                 "decision_time": default["decision_time"],
                 "district": default["district"],
                 "policy": "balanced",
@@ -257,11 +391,14 @@ class DemoService:
         }
 
     def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
+        mode = _mode(payload.get("mode"))
+        engine = self.engines[mode]
+        decision_times = self.decision_times_by_mode[mode]
         requested_time = payload.get("decision_time")
         if not requested_time:
             raise ValueError("decision_time 不可為空")
         decision_time = _local_timestamp(requested_time)
-        if decision_time not in self.decision_times:
+        if decision_time not in decision_times:
             raise ValueError("decision_time 不在六月可評估的尖峰時點")
         district = str(payload.get("district", "")).strip()
         policy = str(payload.get("policy", "balanced"))
@@ -273,23 +410,27 @@ class DemoService:
         if not district:
             raise ValueError("district 不可為空")
 
-        current = self.current_peak.loc[
-            self.current_peak["datetime"].eq(decision_time)
-            & self.current_peak["district"].eq(district)
+        current_peak = self.current_peak_by_mode[mode]
+        eligible_source = self.eligible_by_mode[mode]
+        current = current_peak.loc[
+            current_peak["datetime"].eq(decision_time)
+            & current_peak["district"].eq(district)
         ].drop_duplicates("station_id", keep="last")
-        eligible = self.eligible.loc[self.eligible["datetime"].eq(decision_time)].copy()
-        scored = self.engine.predict_frame(eligible, attach_stations=True)
+        eligible = eligible_source.loc[eligible_source["datetime"].eq(decision_time)].copy()
+        scored = engine.predict_frame(eligible, attach_stations=True)
         scored = scored.loc[scored["district"].eq(district)].copy()
 
         threshold = (
-            self.engine.balanced_threshold if policy == "balanced" else self.engine.strict_threshold
+            engine.balanced_threshold if policy == "balanced" else engine.strict_threshold
         )
         scored = scored.sort_values(["p_lgbm_full", "station_id"], ascending=[False, True])
         scored["risk_rank"] = np.arange(1, len(scored) + 1)
         scored["is_alert"] = scored["p_lgbm_full"].ge(threshold)
         alerts = scored.loc[scored["is_alert"]].head(action_limit)
 
-        action_rows = [self._station_record(row, is_scored=True) for _, row in alerts.iterrows()]
+        action_rows = [
+            self._station_record(row, is_scored=True, mode=mode) for _, row in alerts.iterrows()
+        ]
         route = _risk_first_nearest_route(action_rows)
         route_by_station = {row["station_id"]: row for row in route}
 
@@ -299,9 +440,9 @@ class DemoService:
             station_id = int(row.station_id)
             scored_row = scored_by_station.get(station_id)
             if scored_row is None:
-                candidates.append(self._station_record(row, is_scored=False))
+                candidates.append(self._station_record(row, is_scored=False, mode=mode))
                 continue
-            item = self._station_record(scored_row, is_scored=True)
+            item = self._station_record(scored_row, is_scored=True, mode=mode)
             if station_id in route_by_station:
                 route_item = route_by_station[station_id]
                 item["route_order"] = route_item["route_order"]
@@ -320,7 +461,36 @@ class DemoService:
         max_probability = scored["p_lgbm_full"].max() if not scored.empty else None
         known_durations = pd.to_numeric(scored["red_duration_steps"], errors="coerce")
         longest_steps = int(known_durations.max()) if known_durations.notna().any() else None
+        summary = {
+            "current_red": int(len(current)),
+            "scored_current_red": int(len(scored)),
+            "unscored_current_red": int(len(current) - len(scored)),
+            "current_imbalance": int(len(current)),
+            "scored_current_imbalance": int(len(scored)),
+            "unscored_current_imbalance": int(len(current) - len(scored)),
+            "alerts_before_limit": int(scored["is_alert"].sum()),
+            "action_count": int(len(route)),
+            "max_risk_probability": _safe_number(max_probability),
+            "longest_red_duration": _duration_text(longest_steps, mode),
+        }
+        if mode == "empty":
+            summary.update(
+                {
+                    "current_empty": int(len(current)),
+                    "scored_current_empty": int(len(scored)),
+                    "unscored_current_empty": int(len(current) - len(scored)),
+                }
+            )
+        else:
+            summary.update(
+                {
+                    "current_full_dock": int(len(current)),
+                    "scored_current_full_dock": int(len(scored)),
+                    "unscored_current_full_dock": int(len(current) - len(scored)),
+                }
+            )
         return {
+            "mode": mode,
             "decision_time": _iso_taipei(decision_time),
             "target_time": _iso_taipei(target_time),
             "timezone": TAIPEI_TIMEZONE,
@@ -331,46 +501,43 @@ class DemoService:
                 "label": "平衡模式" if policy == "balanced" else "嚴格模式",
                 "threshold": threshold,
             },
-            "summary": {
-                "current_empty": int(len(current)),
-                "scored_current_empty": int(len(scored)),
-                "unscored_current_empty": int(len(current) - len(scored)),
-                "alerts_before_limit": int(scored["is_alert"].sum()),
-                "action_count": int(len(route)),
-                "max_risk_probability": _safe_number(max_probability),
-                "longest_red_duration": _duration_text(longest_steps),
-            },
+            "summary": summary,
             "candidates": candidates,
             "actions": route,
-            "route_method": "最高風險站起點，再依相鄰距離串接；僅為巡補順序示意。",
+            "route_method": "最高風險站起點，再依相鄰距離串接；僅為調度關注順序示意。",
             "truth_revealed": False,
         }
 
     def reveal(self, payload: dict[str, Any]) -> dict[str, Any]:
+        mode = _mode(payload.get("mode"))
         requested_time = payload.get("decision_time")
         if not requested_time:
             raise ValueError("decision_time 不可為空")
         decision_time = _local_timestamp(requested_time)
-        if decision_time not in self.decision_times:
+        if decision_time not in self.decision_times_by_mode[mode]:
             raise ValueError("decision_time 不在六月可評估的尖峰時點")
         station_ids = list(dict.fromkeys(int(value) for value in payload.get("station_ids", [])))
         if not station_ids:
             raise ValueError("station_ids 不可為空")
-        selected = self.reference.loc[
-            self.reference["datetime"].eq(decision_time)
-            & self.reference["station_id"].isin(station_ids)
+        reference = self.reference_for(mode)
+        selected = reference.loc[
+            reference["datetime"].eq(decision_time)
+            & reference["station_id"].isin(station_ids)
         ].drop_duplicates("station_id", keep="last")
         result_by_station = {
             int(row.station_id): bool(row.y_same_30)
             for row in selected.itertuples(index=False)
         }
-        results = [
-            {"station_id": station_id, "still_empty": result_by_station.get(station_id)}
-            for station_id in station_ids
-        ]
-        evaluated = [item for item in results if item["still_empty"] is not None]
-        hits = sum(bool(item["still_empty"]) for item in evaluated)
+        results = []
+        for station_id in station_ids:
+            outcome = result_by_station.get(station_id)
+            item = {"station_id": station_id, "still_red": outcome, "still_imbalanced": outcome}
+            item["still_empty" if mode == "empty" else "still_full_dock"] = outcome
+            results.append(item)
+        evaluated = [item for item in results if item["still_red"] is not None]
+        hits = sum(bool(item["still_red"]) for item in evaluated)
         return {
+            "mode": mode,
             "decision_time": _iso_taipei(decision_time),
             "target_time": _iso_taipei(decision_time + pd.Timedelta(minutes=30)),
             "results": results,
@@ -379,16 +546,20 @@ class DemoService:
                 "hits": hits,
                 "precision": round(hits / len(evaluated), 6) if evaluated else None,
             },
-            "scoring_note": "逐快照比較t+30是否仍為0車，不使用Episode命中。",
+            "scoring_note": (
+                f"逐快照比較t+30是否{MODE_COPY[mode]['outcome']}，不使用Episode命中。"
+            ),
         }
 
     def explain(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Explain one truth-free prediction with TreeSHAP and a safe summary."""
+        mode = _mode(payload.get("mode"))
+        engine = self.engines[mode]
         requested_time = payload.get("decision_time")
         if not requested_time:
             raise ValueError("decision_time 不可為空")
         decision_time = _local_timestamp(requested_time)
-        if decision_time not in self.decision_times:
+        if decision_time not in self.decision_times_by_mode[mode]:
             raise ValueError("decision_time 不在六月可評估的尖峰時點")
 
         raw_station_id = payload.get("station_id")
@@ -411,7 +582,7 @@ class DemoService:
         if not 1 <= action_limit <= 25:
             raise ValueError("action_limit 必須介於1到25")
 
-        cache_key = (int(decision_time.value), district, station_id, policy, action_limit)
+        cache_key = (mode, int(decision_time.value), district, station_id, policy, action_limit)
         now = time.monotonic()
         with self._explain_cache_lock:
             cached_entry = self._explain_cache.get(cache_key)
@@ -421,9 +592,10 @@ class DemoService:
         if cached_entry is not None:
             return copy.deepcopy(cached_entry[1])
 
-        model_row = self.eligible.loc[
-            self.eligible["datetime"].eq(decision_time)
-            & self.eligible["station_id"].eq(station_id)
+        eligible = self.eligible_by_mode[mode]
+        model_row = eligible.loc[
+            eligible["datetime"].eq(decision_time)
+            & eligible["station_id"].eq(station_id)
         ].drop_duplicates("station_id", keep="last")
         if model_row.empty:
             raise ValueError("此站在該時點缺少完整歷史，無法產生模型解釋")
@@ -434,6 +606,7 @@ class DemoService:
                 "district": district,
                 "policy": policy,
                 "action_limit": action_limit,
+                "mode": mode,
             }
         )
         station = next(
@@ -464,14 +637,18 @@ class DemoService:
             "route_order": station["route_order"],
             "policy_label": prediction["policy"]["label"],
             "threshold": threshold,
+            "mode": mode,
+            "event_label": MODE_COPY[mode]["event"],
+            "outcome_label": MODE_COPY[mode]["outcome"],
         }
-        shap = explain_row(self.engine, model_row)
+        shap = explain_row(engine, model_row, mode=mode)
         response = compose_explain_response(
             station_facts,
             shap,
             service=self.summary_service,
         )
         result = {
+            "mode": mode,
             "decision_time": station_facts["decision_time"],
             "target_time": station_facts["target_time"],
             "station": {
@@ -495,7 +672,7 @@ class DemoService:
         return result
 
     @staticmethod
-    def _station_record(row: Any, is_scored: bool) -> dict[str, Any]:
+    def _station_record(row: Any, is_scored: bool, mode: str = "empty") -> dict[str, Any]:
         def get(name: str, default: Any = None) -> Any:
             if isinstance(row, pd.Series):
                 return row.get(name, default)
@@ -517,7 +694,7 @@ class DemoService:
             "red_duration_steps": (
                 int(duration_steps) if duration_steps is not None and not pd.isna(duration_steps) else None
             ),
-            "red_duration_display": _duration_text(duration_steps),
+            "red_duration_display": _duration_text(duration_steps, mode),
             "status": "scored" if is_scored else "insufficient_history",
             "risk_probability": probability,
             "risk_rank": (
@@ -547,6 +724,13 @@ class DemoRequestHandler(BaseHTTPRequestHandler):
                 self._write_json(
                     {
                         "status": "ok",
+                        "models": {
+                            mode: {
+                                "model": "lgbm_all_features",
+                                "rows": len(self.service.eligible_by_mode[mode]),
+                            }
+                            for mode in SUPPORTED_MODES
+                        },
                         "model": "lgbm_full",
                         "rows": len(self.service.eligible),
                         "process_id": os.getpid(),
@@ -556,7 +740,8 @@ class DemoRequestHandler(BaseHTTPRequestHandler):
             if parsed.path == "/api/options":
                 query = parse_qs(parsed.query)
                 requested = query.get("decision_time", [None])[0]
-                self._write_json(self.service.options(requested))
+                mode = query.get("mode", ["empty"])[0]
+                self._write_json(self.service.options(requested, mode=mode))
                 return
             self._write_json({"error": "找不到此端點"}, HTTPStatus.NOT_FOUND)
         except (ValueError, TypeError) as error:

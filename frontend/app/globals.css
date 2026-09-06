@@ -80,6 +80,7 @@ button, select { font: inherit; }
 .control-fields { display: flex; align-items: end; gap: 10px; }
 .control-field { display: grid; gap: 6px; color: #809ba7; font-size: 12px; }
 .control-select { min-width: 220px; height: 38px !important; border-color: #2a4b59; background: #0d2330; color: #e9f5f7; }
+.control-select.mode { min-width: 170px; border-color: #34756f; background: #0d2b31; }
 .control-select.small { min-width: 150px; }
 .run-button { height: 38px; padding: 0 16px; background: #38dbc5; color: #052521; box-shadow: 0 8px 26px #2fe0c32b; }
 .run-button:hover { background: #5be7d3; }
@@ -225,7 +226,7 @@ button, select { font: inherit; }
   .app-shell { padding-inline: 18px; }
   .control-strip { align-items: start; flex-direction: column; }
   .control-fields { width: 100%; }
-  .control-fields .control-field:first-child { flex: 1; }
+  .control-fields .control-field:nth-child(2) { flex: 1; }
   .control-select { width: 100%; }
   .scenario-note { align-items: start; flex-direction: column; gap: 4px; }
   .scenario-note small { text-align: left; }
@@ -239,6 +240,7 @@ button, select { font: inherit; }
   .topbar { height: 66px; }
   .brand span, .system-state { display: none; }
   .control-fields { display: grid; grid-template-columns: 1fr 1fr; }
+  .control-fields .control-field:nth-child(3) { grid-column: 1 / -1; }
   .control-intro > div { align-items: start; flex-wrap: wrap; }
   .control-intro strong { font-size: 16px; }
   .run-button { grid-column: 1 / -1; }
@@ -258,6 +260,7 @@ button, select { font: inherit; }
   .app-shell { padding-inline: 10px; }
   .control-field { min-width: 0; }
   .control-select,
+  .control-select.mode,
   .control-select.small { min-width: 0; width: 100%; }
   .metric-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .metric-card { min-width: 0; min-height: 108px; align-items: start; gap: 9px; padding: 12px 10px; }

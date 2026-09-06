@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Standalone inference for the frozen YouBike empty-station LightGBM model.
+"""Standalone inference for the frozen YouBike persistence LightGBM models.
 
 Only the 68 feature names frozen before May are selected for the model matrix.
 Outcome columns such as ``y_same_30`` and ``future_30_*`` are never passed to
@@ -32,6 +32,29 @@ AUDIT_ONLY_COLUMNS = {
     "future_30_opposite_red",
     "primary_prediction_correct",
 }
+SUPPORTED_MODES = ("empty", "full_dock")
+MODE_ASSETS: dict[str, dict[str, str]] = {
+    "empty": {
+        "model_env": "UBIKE_MODEL_PATH",
+        "model_default": "model/lgbm_full.txt",
+        "freeze_env": "UBIKE_FREEZE_PATH",
+        "freeze_default": "config/final_policy_freeze_before_may.json",
+        "protocol_env": "UBIKE_PROTOCOL_PATH",
+        "protocol_default": "config/protocol_frozen_before_june.json",
+        "input_env": "UBIKE_INPUT_PATH",
+        "input_default": "data/source/dynamic_red_empty_2026_06.parquet",
+    },
+    "full_dock": {
+        "model_env": "UBIKE_FULL_DOCK_MODEL_PATH",
+        "model_default": "model/lgbm_full_dock.txt",
+        "freeze_env": "UBIKE_FULL_DOCK_FREEZE_PATH",
+        "freeze_default": "config/final_policy_freeze_full_dock_before_may.json",
+        "protocol_env": "UBIKE_FULL_DOCK_PROTOCOL_PATH",
+        "protocol_default": "config/protocol_full_dock_frozen_before_june.json",
+        "input_env": "UBIKE_FULL_DOCK_INPUT_PATH",
+        "input_default": "data/source/dynamic_red_full_2026_06.parquet",
+    },
+}
 
 
 def _repo_path(env_name: str, default: str) -> Path:
@@ -52,13 +75,18 @@ class FrozenYouBikeModel:
         freeze_path: Path | None = None,
         protocol_path: Path | None = None,
         stations_path: Path | None = None,
+        mode: str = "empty",
     ) -> None:
-        self.model_path = model_path or _repo_path("UBIKE_MODEL_PATH", "model/lgbm_full.txt")
+        if mode not in SUPPORTED_MODES:
+            raise ValueError(f"mode must be one of {SUPPORTED_MODES}")
+        self.mode = mode
+        assets = MODE_ASSETS[mode]
+        self.model_path = model_path or _repo_path(assets["model_env"], assets["model_default"])
         self.freeze_path = freeze_path or _repo_path(
-            "UBIKE_FREEZE_PATH", "config/final_policy_freeze_before_may.json"
+            assets["freeze_env"], assets["freeze_default"]
         )
         self.protocol_path = protocol_path or _repo_path(
-            "UBIKE_PROTOCOL_PATH", "config/protocol_frozen_before_june.json"
+            assets["protocol_env"], assets["protocol_default"]
         )
         self.stations_path = stations_path or _repo_path(
             "UBIKE_STATIONS_PATH", "data/stations/dim_station.csv"
@@ -185,10 +213,11 @@ class FrozenYouBikeModel:
         return result
 
 
-def load_demo_source(path: Path | None = None) -> pd.DataFrame:
-    source_path = path or _repo_path(
-        "UBIKE_INPUT_PATH", "data/source/dynamic_red_empty_2026_06.parquet"
-    )
+def load_demo_source(path: Path | None = None, mode: str = "empty") -> pd.DataFrame:
+    if mode not in SUPPORTED_MODES:
+        raise ValueError(f"mode must be one of {SUPPORTED_MODES}")
+    assets = MODE_ASSETS[mode]
+    source_path = path or _repo_path(assets["input_env"], assets["input_default"])
     frame = pd.read_parquet(source_path)
     for column in ("datetime", "target_datetime", "episode_start_datetime"):
         frame[column] = pd.to_datetime(frame[column])
@@ -224,6 +253,12 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--datetime", help="Exact decision time, e.g. 2026-06-23 19:30")
     parser.add_argument("--district", help="Exact district name, e.g. 板橋區")
+    parser.add_argument(
+        "--mode",
+        choices=SUPPORTED_MODES,
+        default="empty",
+        help="Predict persistent empty stations or persistent full docks",
+    )
     parser.add_argument("--top", type=int, default=10, help="Highest-risk rows to return")
     parser.add_argument(
         "--policy",
@@ -241,8 +276,8 @@ def main() -> None:
     args = _parse_args()
     if args.top <= 0:
         raise SystemExit("--top must be greater than zero")
-    engine = FrozenYouBikeModel()
-    source = select_eligible_june(load_demo_source(args.input))
+    engine = FrozenYouBikeModel(mode=args.mode)
+    source = select_eligible_june(load_demo_source(args.input, mode=args.mode))
     if args.datetime:
         requested_time = pd.Timestamp(args.datetime)
         source = source.loc[source["datetime"].eq(requested_time)].copy()
@@ -292,4 +327,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

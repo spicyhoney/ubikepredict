@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "bundle": "ubikepredict-frozen-june-demo",
-  "generated_at": "2026-09-05T00:00:00+08:00",
+  "generated_at": "2026-09-06T18:40:00+08:00",
   "self_hash": null,
   "self_hash_note": "MANIFEST.json excludes itself because embedding its own SHA256 would be recursive.",
   "files": [
     {
       "path": ".env.example",
-      "bytes": 918,
-      "sha256": "6f1edc3d85829be56be353d33e9151905e181207f111d1a3e534ef674a894501",
+      "bytes": 1377,
+      "sha256": "ace9a36246fcd25699580cc9fd90740f14cf1060561b018cc32bc84980d696a8",
       "purpose": "Safe repository-relative path configuration template; contains no credentials."
     },
     {
@@ -25,27 +25,45 @@
     },
     {
       "path": "backend/inference.py",
-      "bytes": 11549,
-      "sha256": "80605bdf26f61bb6ba607d5eb124f9f66871196c50c05cc4070585009d71676b",
-      "purpose": "Exact 68-feature LightGBM, Platt calibration, frozen thresholds and CLI inference."
+      "bytes": 13119,
+      "sha256": "af14543f280e1d6c9d11d60ef584ce0f6e3dcd3c6255ced6dd8c221984ab2249",
+      "purpose": "Exact dual-mode 68-feature LightGBM, Platt calibration, frozen thresholds and CLI inference."
     },
     {
       "path": "config/final_policy_freeze_before_may.json",
       "bytes": 9282,
       "sha256": "fef97defc8935a499831f12f1f42dd9d153b1075b61c50f3b57219c0bbccc714",
-      "purpose": "Frozen feature order, calibration parameters and policy thresholds."
+      "purpose": "Frozen empty-station feature order, calibration parameters and policy thresholds."
+    },
+    {
+      "path": "config/final_policy_freeze_full_dock_before_may.json",
+      "bytes": 28347,
+      "sha256": "02fde25d6833d046ad92c6325e6ac60cc8659ec78c09e51759c48789722e0694",
+      "purpose": "Frozen full-dock feature order, calibration parameters and policy thresholds."
     },
     {
       "path": "config/protocol_frozen_before_june.json",
       "bytes": 27099,
       "sha256": "a65243c5ff986f57b0fb53f26a7649ccbc130a74765890788fe6196640c9825b",
-      "purpose": "Pre-June protocol and categorical schemas used for reproducible inference."
+      "purpose": "Pre-June empty-station protocol and categorical schemas used for reproducible inference."
+    },
+    {
+      "path": "config/protocol_full_dock_frozen_before_june.json",
+      "bytes": 21081,
+      "sha256": "dc5cee1e9db099bda81918a218a65c61f3878b95b53651b5611b98efd601da5f",
+      "purpose": "Pre-June full-dock protocol and categorical schemas used for reproducible inference."
     },
     {
       "path": "data/reference/june_all_eligible_decisions.parquet",
       "bytes": 500714,
       "sha256": "5f725b36965e41026679772dd60d79734e939b7a17025b6623f8385727660385",
-      "purpose": "Frozen June predictions and outcomes used only for parity testing and reveal."
+      "purpose": "Frozen June empty-station predictions and outcomes used only for parity testing and reveal."
+    },
+    {
+      "path": "data/reference/june_full_dock_all_eligible_decisions.parquet",
+      "bytes": 92366,
+      "sha256": "e89486879bd6bd8e7872b69da6890c51c2b0b864cbead01c9db1f509b453d73f",
+      "purpose": "Frozen June full-dock predictions and outcomes used only for parity testing and reveal."
     },
     {
       "path": "data/source/dynamic_red_empty_2026_06.parquet",
@@ -60,6 +78,18 @@
       "purpose": "Truth-free June API input with audit outcomes and future columns physically removed."
     },
     {
+      "path": "data/source/dynamic_red_full_2026_06.parquet",
+      "bytes": 512554,
+      "sha256": "3763adbfc04e352c9d273a3bc20da25442a0cc5ad17afb0551ba5bf070a0b03e",
+      "purpose": "Sealed June feature cache with 9,960 candidate full-dock station snapshots."
+    },
+    {
+      "path": "data/source/dynamic_red_full_2026_06_input.parquet",
+      "bytes": 507827,
+      "sha256": "0bfb7fcf13c7f4e1bc0448ab670d6ef89d4f27e849080b91a850557c2fa7774b",
+      "purpose": "Truth-free June full-dock API input with audit outcomes and future columns physically removed."
+    },
+    {
       "path": "data/stations/dim_station.csv",
       "bytes": 193983,
       "sha256": "2ea9d705da0d3508fd7e89009398b8b272188937c1e5f7209d0748cb1998d81f",
@@ -67,20 +97,26 @@
     },
     {
       "path": "docs/model-card.md",
-      "bytes": 3587,
-      "sha256": "f6dcc4b1f6ec2b54d34aa4dc9f76e74c203369c6ae249a3c1b42b66e9ad1edd5",
-      "purpose": "Model scope, frozen policy, provenance, limitations and leakage controls."
+      "bytes": 5450,
+      "sha256": "9cfe81605a7606247f63c83abb212e173b0d33b1e9056a985fb4ec5c37f1f288",
+      "purpose": "Dual-mode model scope, frozen policies, provenance, limitations and leakage controls."
     },
     {
       "path": "model/lgbm_full.txt",
       "bytes": 1237897,
       "sha256": "d2e8ce0738caa0544531d4ac880bab8c1983fbf52686683631cb65475b5d5cf8",
-      "purpose": "Frozen v2 full LightGBM model with 242 trees and 68 ordered features."
+      "purpose": "Frozen empty-station LightGBM model with 242 trees and 68 ordered features."
+    },
+    {
+      "path": "model/lgbm_full_dock.txt",
+      "bytes": 532851,
+      "sha256": "730bb702e8c412c66311f046f37d45f8af0c8fc188c6df684b3f7a3fb033a063",
+      "purpose": "Frozen full-dock LightGBM model with 114 trees and 68 ordered features."
     },
     {
       "path": "README.md",
-      "bytes": 7972,
-      "sha256": "f8a55b7cc6b65b913b3c4a9d75a6930d294a124bab68f5a819036e3729ef5ee4",
+      "bytes": 9443,
+      "sha256": "fd068a0f1e1ce1aa3367f9c8ce2927175a5dd397339f3ff754de287b59edaa43",
       "purpose": "Traditional Chinese setup, testing, CLI, data-boundary and AWS handoff guide."
     },
     {
@@ -91,9 +127,9 @@
     },
     {
       "path": "scripts/run-demo.ps1",
-      "bytes": 752,
-      "sha256": "f68cec4a37dade00d31994fc0093f89404387d392ff8fd0ff99bc7fa0ce14615",
-      "purpose": "One-command time, district, policy and Top-N demo runner."
+      "bytes": 842,
+      "sha256": "6719a6371cbd6e1de8a8415e8c5d273b6e9a7e11d222e24b2ccddb2ed51f4d54",
+      "purpose": "One-command mode, time, district, policy and Top-N demo runner."
     },
     {
       "path": "scripts/setup.ps1",
@@ -109,9 +145,9 @@
     },
     {
       "path": "tests/smoke_test.py",
-      "bytes": 5215,
-      "sha256": "3a4d7a3ba5710a850ec939d3423524a8cdbed611e87b332b7801c76bc971bbb3",
-      "purpose": "Manifest, leakage, nine-row golden, unknown-category and full parity tests."
+      "bytes": 6704,
+      "sha256": "74708bb77e105779797b8d6cf96cf98ac9d70515aedaff1190ccafebac5575d1",
+      "purpose": "Manifest, leakage, nine-row golden, unknown-category and dual-mode full parity tests."
     }
   ]
 }

@@ -32,7 +32,19 @@ const API_BASE_URL = (
 ).replace(/\/+$/, '');
 
 type PolicyId = 'balanced' | 'strict';
+type ModeId = 'empty' | 'full_dock';
 type MobileView = 'map' | 'actions' | 'insight';
+
+type ModeOption = {
+  id: ModeId;
+  label: string;
+  description?: string;
+  short_label?: string;
+  event_noun?: string;
+  positive_outcome?: string;
+};
+
+type ModeValue = ModeId | ModeOption;
 
 type Scenario = {
   id: string;
@@ -50,9 +62,12 @@ type Policy = {
 };
 
 type OptionsResponse = {
+  mode?: ModeValue;
+  modes?: ModeOption[];
   policies: Policy[];
   scenarios: Scenario[];
   default: {
+    mode?: ModeId;
     decision_time: string;
     district: string;
     policy: PolicyId;
@@ -77,6 +92,7 @@ type Candidate = {
 };
 
 type PredictionResponse = {
+  mode: ModeValue;
   decision_time: string;
   target_time: string;
   district: string;
@@ -87,9 +103,15 @@ type PredictionResponse = {
     threshold: number;
   };
   summary: {
-    current_empty: number;
-    scored_current_empty: number;
-    unscored_current_empty: number;
+    current_red?: number;
+    scored_current_red?: number;
+    unscored_current_red?: number;
+    current_empty?: number;
+    scored_current_empty?: number;
+    unscored_current_empty?: number;
+    current_full_dock?: number;
+    scored_current_full_dock?: number;
+    unscored_current_full_dock?: number;
     alerts_before_limit: number;
     action_count: number;
     max_risk_probability: number | null;
@@ -101,8 +123,14 @@ type PredictionResponse = {
 };
 
 type RevealResponse = {
+  mode: ModeValue;
   target_time: string;
-  results: Array<{ station_id: number; still_empty: boolean | null }>;
+  results: Array<{
+    station_id: number;
+    still_red?: boolean | null;
+    still_empty?: boolean | null;
+    still_full_dock?: boolean | null;
+  }>;
   summary: {
     evaluated_actions: number;
     hits: number;
@@ -120,6 +148,7 @@ type ShapFactor = {
 };
 
 type ExplainResponse = {
+  mode: ModeValue;
   decision_time: string;
   target_time: string;
   station: {
@@ -143,10 +172,62 @@ type ExplainResponse = {
 };
 
 type RunInput = {
+  mode?: ModeId;
   scenarioId?: string;
   policy?: PolicyId;
   actionLimit?: number;
 };
+
+const DEFAULT_MODES: ModeOption[] = [
+  { id: 'empty', label: '缺車持續（主要）', description: '預測目前0車站點30分鐘後是否仍無車可借。' },
+  { id: 'full_dock', label: '滿柱持續（輔助）', description: '預測目前0空位站點30分鐘後是否仍無位可還。' },
+];
+
+const MODE_COPY = {
+  empty: {
+    title: 'YouBike 持續缺車預警',
+    subtitle: '新北市歷史回放 · 30分鐘動態決策',
+    eventNoun: '缺車',
+    currentState: '0車',
+    candidateLabel: '可評估缺車站',
+    triggerNote: '當下0車才進入模型',
+    positiveOutcome: '仍為0車',
+    positiveLegend: '仍缺車',
+    recoveredOutcome: '已恢復有車',
+    routeTitle: '優先巡補順序',
+    question: '哪些站30分鐘後仍可能維持0車，值得優先保留營運注意力。',
+  },
+  full_dock: {
+    title: 'YouBike 持續滿柱預警',
+    subtitle: '輔助模式 · 30分鐘無位可還風險',
+    eventNoun: '滿柱',
+    currentState: '0空位',
+    candidateLabel: '可評估滿柱站',
+    triggerNote: '當下0空位才進入模型',
+    positiveOutcome: '仍為0空位',
+    positiveLegend: '仍滿柱',
+    recoveredOutcome: '已恢復空位',
+    routeTitle: '優先調度順序',
+    question: '哪些站30分鐘後仍可能維持0空位，值得列入輔助調度清單。',
+  },
+} satisfies Record<ModeId, Record<string, string>>;
+
+function modeIdOf(value: ModeValue | undefined, fallback: ModeId = 'empty'): ModeId {
+  if (typeof value === 'string') return value === 'full_dock' ? 'full_dock' : 'empty';
+  return value?.id === 'full_dock' ? 'full_dock' : fallback;
+}
+
+function scoredCount(summary: PredictionResponse['summary'], mode: ModeId) {
+  return summary.scored_current_red
+    ?? (mode === 'full_dock' ? summary.scored_current_full_dock : summary.scored_current_empty)
+    ?? 0;
+}
+
+function unscoredCount(summary: PredictionResponse['summary'], mode: ModeId) {
+  return summary.unscored_current_red
+    ?? (mode === 'full_dock' ? summary.unscored_current_full_dock : summary.unscored_current_empty)
+    ?? 0;
+}
 
 function formatLocalTime(value: string) {
   return new Intl.DateTimeFormat('zh-TW', {
@@ -252,8 +333,13 @@ function spreadActionPositions(
   return positions;
 }
 
-function outcomeFor(reveal: RevealResponse | null, stationId: number) {
-  return reveal?.results.find((item) => item.station_id === stationId)?.still_empty ?? null;
+function outcomeFor(reveal: RevealResponse | null, stationId: number, mode: ModeId) {
+  const result = reveal?.results.find((item) => item.station_id === stationId);
+  if (!result) return null;
+  if (result.still_red !== undefined) return result.still_red;
+  return mode === 'full_dock'
+    ? result.still_full_dock ?? null
+    : result.still_empty ?? null;
 }
 
 function markerClass(station: Candidate, outcome: boolean | null) {
@@ -276,6 +362,8 @@ function RiskMap({
   selectedStationId: number | null;
   onSelectStation: (stationId: number) => void;
 }) {
+  const mode = modeIdOf(prediction.mode);
+  const copy = MODE_COPY[mode];
   const basePositions = useMemo(
     () => projectCandidates(prediction.candidates),
     [prediction.candidates],
@@ -294,7 +382,7 @@ function RiskMap({
   const selected = prediction.candidates.find((station) => station.station_id === selectedStationId);
 
   return (
-    <div id="mobile-map-panel" className="map-shell" aria-label={`${prediction.district}缺車風險站點與巡補順序示意圖`}>
+    <div id="mobile-map-panel" className="map-shell" aria-label={`${prediction.district}${copy.eventNoun}風險站點與調度順序示意圖`}>
       <div className="map-meta">
         <div>
           <span className="eyebrow">區域風險圖</span>
@@ -304,7 +392,7 @@ function RiskMap({
       </div>
 
       <div className="map-stage">
-        <svg className="risk-map" viewBox="0 0 100 78" aria-label="站點座標與風險導向巡補順序">
+        <svg className="risk-map" viewBox="0 0 100 78" aria-label={`站點座標與${copy.routeTitle}`}>
           <defs>
             <linearGradient id="map-glow" x1="0" x2="1" y1="0" y2="1">
               <stop offset="0%" stopColor="#132c3a" />
@@ -330,7 +418,7 @@ function RiskMap({
           {prediction.candidates.map((station) => {
             const position = basePositions.get(station.station_id);
             if (!position) return null;
-            const outcome = outcomeFor(reveal, station.station_id);
+            const outcome = outcomeFor(reveal, station.station_id, mode);
             const selectedClass = station.station_id === selectedStationId ? ' selected' : '';
             const interactive = station.status === 'scored';
             return (
@@ -362,7 +450,7 @@ function RiskMap({
             const base = basePositions.get(station.station_id);
             const badge = badgePositions.get(station.station_id);
             if (!base || !badge) return null;
-            const outcome = outcomeFor(reveal, station.station_id);
+            const outcome = outcomeFor(reveal, station.station_id, mode);
             const selectedClass = station.station_id === selectedStationId ? ' selected' : '';
             const moved = Math.hypot(base.x - badge.x, base.y - badge.y) > 0.35;
             return (
@@ -373,7 +461,7 @@ function RiskMap({
                 <g
                   className="station-marker route-badge interactive"
                   transform={`translate(${badge.x} ${badge.y})`}
-                  aria-label={`巡補順位${station.route_order}，${station.station_name}`}
+                  aria-label={`${copy.routeTitle}第${station.route_order}站，${station.station_name}`}
                   tabIndex={0}
                   onClick={() => onSelectStation(station.station_id)}
                   onKeyDown={(event) => {
@@ -411,8 +499,8 @@ function RiskMap({
         )}
         <span><i className="legend-dot below-threshold" />30分鐘風險未達門檻</span>
         <span><i className="legend-dot unknown" />資料不足</span>
-        {reveal && <span><i className="legend-dot still-empty" />仍缺車</span>}
-        {reveal && <span><i className="legend-dot recovered" />已恢復</span>}
+        {reveal && <span><i className="legend-dot still-empty" />{copy.positiveLegend}</span>}
+        {reveal && <span><i className="legend-dot recovered" />{copy.recoveredOutcome}</span>}
         <span className="route-note"><Route size={14} />#1最高風險，其後鄰近串接；非實際派車指令</span>
       </div>
     </div>
@@ -505,6 +593,7 @@ function StationInsight({
 }
 
 export default function Home() {
+  const [mode, setMode] = useState<ModeId>('empty');
   const [options, setOptions] = useState<OptionsResponse | null>(null);
   const [scenarioId, setScenarioId] = useState('representative');
   const [policy, setPolicy] = useState<PolicyId>('balanced');
@@ -529,14 +618,16 @@ export default function Home() {
     setExplainLoading(stationId !== null);
   }, []);
 
-  const runPrediction = useCallback(async (input: RunInput = {}) => {
-    const activeOptions = options;
-    if (!activeOptions) throw new Error('歷史情境仍在載入');
-    const requestedScenarioId = input.scenarioId ?? scenarioId;
+  const performPrediction = useCallback(async (
+    requestedMode: ModeId,
+    activeOptions: OptionsResponse,
+    input: RunInput = {},
+  ) => {
+    const requestedScenarioId = input.scenarioId ?? activeOptions.scenarios[0]?.id;
     const scenario = activeOptions.scenarios.find((item) => item.id === requestedScenarioId);
     if (!scenario) throw new Error('找不到指定的歷史情境');
-    const requestedPolicy = input.policy ?? policy;
-    const actionLimit = input.actionLimit ?? 10;
+    const requestedPolicy = input.policy ?? activeOptions.default.policy;
+    const actionLimit = input.actionLimit ?? activeOptions.default.action_limit ?? 10;
 
     setLoading(true);
     setError(null);
@@ -552,6 +643,7 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          mode: requestedMode,
           decision_time: scenario.decision_time,
           district: scenario.district,
           policy: requestedPolicy,
@@ -561,9 +653,13 @@ export default function Home() {
       const payload = await response.json() as PredictionResponse & { error?: string };
       if (!response.ok) throw new Error(payload.error ?? '預測服務沒有回應');
       const loadedPrediction = payload as PredictionResponse;
+      const responseMode = modeIdOf(loadedPrediction.mode, requestedMode);
+      if (responseMode !== requestedMode) throw new Error('模型服務回傳了不同的預測模式');
+      setMode(responseMode);
       setPrediction(loadedPrediction);
       selectStation(loadedPrediction.actions[0]?.station_id ?? null);
       return {
+        mode: responseMode,
         scenario: scenario.label,
         policy: requestedPolicy,
         actionCount: (payload as PredictionResponse).summary.action_count,
@@ -575,7 +671,55 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, [options, policy, scenarioId, selectStation]);
+  }, [selectStation]);
+
+  const loadModeAndPredict = useCallback(async (
+    requestedMode: ModeId,
+    input: RunInput = {},
+  ) => {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/options?mode=${encodeURIComponent(requestedMode)}`,
+      );
+      const payload = await response.json() as OptionsResponse & { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? '無法載入歷史情境');
+      const loaded = payload as OptionsResponse;
+      const responseMode = modeIdOf(loaded.mode, requestedMode);
+      if (responseMode !== requestedMode) throw new Error('模型服務回傳了不同的模式設定');
+      if (!loaded.scenarios.length) throw new Error('此模式目前沒有可回放的歷史情境');
+
+      const requestedScenarioId = input.scenarioId ?? loaded.scenarios[0].id;
+      const requestedPolicy = input.policy ?? loaded.default.policy;
+      setMode(responseMode);
+      setOptions(loaded);
+      setScenarioId(requestedScenarioId);
+      setPolicy(requestedPolicy);
+      return await performPrediction(responseMode, loaded, {
+        ...input,
+        scenarioId: requestedScenarioId,
+        policy: requestedPolicy,
+      });
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : '無法切換預測模式';
+      setError(message);
+      throw requestError;
+    } finally {
+      setLoading(false);
+    }
+  }, [performPrediction]);
+
+  const runPrediction = useCallback(async (input: RunInput = {}) => {
+    const requestedMode = input.mode ?? mode;
+    const activeOptions = options;
+    if (!activeOptions || requestedMode !== mode) {
+      return loadModeAndPredict(requestedMode, input);
+    }
+    return performPrediction(requestedMode, activeOptions, {
+      ...input,
+      scenarioId: input.scenarioId ?? scenarioId,
+      policy: input.policy ?? policy,
+    });
+  }, [loadModeAndPredict, mode, options, performPrediction, policy, scenarioId]);
 
   const revealOutcome = useCallback(async () => {
     if (!prediction || !prediction.actions.length) throw new Error('目前沒有可揭曉的行動清單');
@@ -586,12 +730,16 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          mode: modeIdOf(prediction.mode, mode),
           decision_time: prediction.decision_time,
           station_ids: prediction.actions.map((station) => station.station_id),
         }),
       });
       const payload = await response.json() as RevealResponse & { error?: string };
       if (!response.ok) throw new Error(payload.error ?? '無法揭曉歷史結果');
+      if (modeIdOf(payload.mode, mode) !== modeIdOf(prediction.mode, mode)) {
+        throw new Error('揭曉結果與目前預測模式不一致');
+      }
       setReveal(payload as RevealResponse);
       return (payload as RevealResponse).summary;
     } catch (requestError) {
@@ -600,7 +748,7 @@ export default function Home() {
     } finally {
       setRevealing(false);
     }
-  }, [prediction]);
+  }, [mode, prediction]);
 
   const runPredictionRef = useRef(runPrediction);
   const revealOutcomeRef = useRef(revealOutcome);
@@ -613,33 +761,20 @@ export default function Home() {
     let active = true;
     async function initialize() {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/options`);
+        const response = await fetch(`${API_BASE_URL}/api/options?mode=empty`);
         const payload = await response.json() as OptionsResponse & { error?: string };
         if (!response.ok) throw new Error(payload.error ?? '無法載入歷史情境');
         if (!active) return;
         const loaded = payload as OptionsResponse;
+        if (!loaded.scenarios.length) throw new Error('缺車模式目前沒有可回放的歷史情境');
+        setMode('empty');
         setOptions(loaded);
-        setScenarioId(loaded.scenarios[0]?.id ?? 'representative');
+        setScenarioId(loaded.scenarios[0].id);
         setPolicy(loaded.default.policy);
-
-        const scenario = loaded.scenarios[0];
-        const predictionResponse = await fetch(`${API_BASE_URL}/api/predict`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            decision_time: scenario.decision_time,
-            district: scenario.district,
-            policy: loaded.default.policy,
-            action_limit: loaded.default.action_limit,
-          }),
+        await performPrediction('empty', loaded, {
+          scenarioId: loaded.scenarios[0].id,
+          policy: loaded.default.policy,
         });
-        const predictionPayload = await predictionResponse.json() as PredictionResponse & { error?: string };
-        if (!predictionResponse.ok) throw new Error(predictionPayload.error ?? '預測服務沒有回應');
-        if (active) {
-          const loadedPrediction = predictionPayload as PredictionResponse;
-          setPrediction(loadedPrediction);
-          selectStation(loadedPrediction.actions[0]?.station_id ?? null);
-        }
       } catch (requestError) {
         if (active) setError(requestError instanceof Error ? requestError.message : '無法啟動Demo');
       } finally {
@@ -648,7 +783,7 @@ export default function Home() {
     }
     void initialize();
     return () => { active = false; };
-  }, [selectStation]);
+  }, [performPrediction]);
 
   useEffect(() => {
     if (!prediction || selectedStationId === null) return;
@@ -658,6 +793,7 @@ export default function Home() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        mode: modeIdOf(prediction.mode, mode),
         decision_time: prediction.decision_time,
         district: prediction.district,
         station_id: selectedStationId,
@@ -680,7 +816,7 @@ export default function Home() {
       });
 
     return () => lifecycle.abort();
-  }, [prediction, selectedStationId]);
+  }, [mode, prediction, selectedStationId]);
 
   useEffect(() => {
     const context = document.modelContext;
@@ -689,11 +825,12 @@ export default function Home() {
 
     void Promise.resolve(context.registerTool({
       name: 'run_youbike_prediction',
-      title: '執行 YouBike 持續缺車預測',
-      description: '選擇歷史情境與警示政策，執行同一個畫面上的30分鐘持續缺車預測。',
+      title: '執行 YouBike 失衡持續預測',
+      description: '選擇缺車或滿柱模式、歷史情境與警示政策，執行30分鐘持續風險預測。',
       inputSchema: {
         type: 'object',
         properties: {
+          mode: { type: 'string', enum: ['empty', 'full_dock'] },
           scenarioId: { type: 'string', enum: options.scenarios.map((scenario) => scenario.id) },
           policy: { type: 'string', enum: ['balanced', 'strict'] },
           actionLimit: { type: 'integer', minimum: 1, maximum: 25 },
@@ -703,6 +840,7 @@ export default function Home() {
       annotations: { readOnlyHint: false, untrustedContentHint: false },
       execute: async (input: unknown) => {
         const value = (input ?? {}) as RunInput;
+        if (value.mode && !['empty', 'full_dock'].includes(value.mode)) throw new Error('不支援的預測模式');
         if (value.policy && !['balanced', 'strict'].includes(value.policy)) throw new Error('不支援的警示政策');
         return runPredictionRef.current(value);
       },
@@ -711,7 +849,7 @@ export default function Home() {
     void Promise.resolve(context.registerTool({
       name: 'reveal_youbike_outcome',
       title: '揭曉歷史結果',
-      description: '揭曉目前畫面行動清單在30分鐘後是否仍為0車，並更新可見結果。',
+      description: '揭曉目前畫面行動清單在30分鐘後是否仍維持所選失衡狀態，並更新可見結果。',
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
       annotations: { readOnlyHint: false, untrustedContentHint: false },
       execute: async () => revealOutcomeRef.current(),
@@ -722,6 +860,10 @@ export default function Home() {
 
   const activeScenario = options?.scenarios.find((item) => item.id === scenarioId);
   const activePolicy = options?.policies.find((item) => item.id === policy);
+  const activeMode = modeIdOf(prediction?.mode, mode);
+  const copy = MODE_COPY[activeMode];
+  const modeOptions = options?.modes?.length ? options.modes : DEFAULT_MODES;
+  const activeModeOption = modeOptions.find((item) => item.id === activeMode);
   const selectedStation =
     prediction?.candidates.find((station) => station.station_id === selectedStationId) ?? null;
 
@@ -731,8 +873,8 @@ export default function Home() {
         <div className="brand">
           <span className="brand-mark"><Bike size={22} /></span>
           <div>
-            <strong>YouBike 持續缺車預警</strong>
-            <span>新北市歷史回放 · 30分鐘動態決策</span>
+            <strong>{copy.title}</strong>
+            <span>{copy.subtitle}</span>
           </div>
         </div>
         <div className={`system-state ${error ? 'offline' : !options ? 'checking' : ''}`}>
@@ -751,6 +893,38 @@ export default function Home() {
           </div>
         </div>
         <div className="control-fields">
+          <div className="control-field">
+            <span>預測模式</span>
+            <Select
+              value={mode}
+              onValueChange={(value) => {
+                if (!value || value === mode) return;
+                setMode(value as ModeId);
+                setLoading(true);
+                setError(null);
+                setOptions(null);
+                setPrediction(null);
+                setReveal(null);
+                setExplanation(null);
+                setExplainError(null);
+                setMobileView('map');
+                selectStation(null);
+                void loadModeAndPredict(value as ModeId).catch(() => undefined);
+              }}
+              disabled={loading || revealing}
+            >
+              <SelectTrigger className="control-select mode">
+                <SelectValue>
+                  {modeOptions.find((item) => item.id === mode)?.label ?? copy.eventNoun}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {modeOptions.map((item) => (
+                  <SelectItem value={item.id} key={item.id}>{item.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="control-field">
             <span>歷史情境</span>
             <Select
@@ -820,16 +994,16 @@ export default function Home() {
 
       <section className="scenario-note">
         <span>{activeScenario?.note ?? '使用六月未參與訓練的資料進行歷史回放。'}</span>
-        <small>{activePolicy?.description}</small>
+        <small>{[activeModeOption?.description, activePolicy?.description].filter(Boolean).join(' · ')}</small>
       </section>
 
       <section className="metric-row" aria-label="預測摘要">
         <article className="metric-card">
           <span className="metric-icon red"><AlertTriangle size={18} /></span>
           <div>
-            <span>可評估缺車站</span>
-            <strong>{prediction?.summary.scored_current_empty ?? '—'}</strong>
-            <small>{prediction ? `另有${prediction.summary.unscored_current_empty}站資料不足` : '當下0車才進入模型'}</small>
+            <span>{copy.candidateLabel}</span>
+            <strong>{prediction ? scoredCount(prediction.summary, activeMode) : '—'}</strong>
+            <small>{prediction ? `另有${unscoredCount(prediction.summary, activeMode)}站資料不足` : copy.triggerNote}</small>
           </div>
         </article>
         <article className="metric-card accent">
@@ -904,12 +1078,12 @@ export default function Home() {
             <div className="side-stack">
               <aside id="mobile-actions-panel" className="action-panel">
               <div className="panel-heading">
-                <div><span className="eyebrow">行動清單</span><h2>優先巡補順序</h2></div>
+                <div><span className="eyebrow">行動清單</span><h2>{copy.routeTitle}</h2></div>
                 <span className="count-badge">{prediction.summary.action_count} 站</span>
               </div>
               <div className="station-list">
                 {prediction.actions.length ? prediction.actions.map((station) => {
-                  const outcome = outcomeFor(reveal, station.station_id);
+                  const outcome = outcomeFor(reveal, station.station_id, activeMode);
                   return (
                     <button
                       className={`station-row ${selectedStationId === station.station_id ? 'active' : ''}`}
@@ -931,7 +1105,7 @@ export default function Home() {
                         {outcome === true && <AlertTriangle size={15} className="outcome-still-empty" />}
                         {outcome === false && <CheckCircle2 size={15} className="outcome-recovered" />}
                         <strong>{riskText(station.risk_probability)}</strong>
-                        <span>{outcome === true ? '仍為0車' : outcome === false ? '已恢復有車' : '持續風險'}</span>
+                        <span>{outcome === true ? copy.positiveOutcome : outcome === false ? copy.recoveredOutcome : '持續風險'}</span>
                       </span>
                     </button>
                   );
@@ -969,7 +1143,7 @@ export default function Home() {
       ) : (
         <section className="workspace-placeholder">
           {loading ? <LoaderCircle size={30} className="spin" /> : <MapPinned size={30} />}
-          <strong>{loading ? '正在讀取模型與六月快照' : '選好情境後執行預測'}</strong>
+          <strong>{loading ? `正在讀取${copy.eventNoun}模型與六月快照` : '選好情境後執行預測'}</strong>
           <span>風險分數由凍結模型即時計算；站點與真值來自六月歷史資料。</span>
         </section>
       )}
@@ -978,7 +1152,7 @@ export default function Home() {
         <div className="explain-icon"><MapPinned size={20} /></div>
         <div>
           <strong>此刻已經亮紅燈，模型回答的是：</strong>
-          <span>哪些站30分鐘後仍可能維持0車，值得優先保留營運注意力。</span>
+          <span>{copy.question}</span>
         </div>
         <div className="method-chip"><CheckCircle2 size={15} />LightGBM · 68項凍結特徵</div>
       </section>

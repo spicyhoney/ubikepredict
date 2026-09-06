@@ -44,8 +44,10 @@ def decoded(response: dict[str, object]) -> dict[str, object]:
 class FakePredictionService:
     eligible = range(123)
 
-    def options(self, requested_time: str | None = None) -> dict[str, object]:
-        return {"requested_time": requested_time}
+    def options(
+        self, requested_time: str | None = None, mode: str = "empty"
+    ) -> dict[str, object]:
+        return {"requested_time": requested_time, "mode": mode}
 
     def predict(self, payload: dict[str, object]) -> dict[str, object]:
         return {"prediction": payload}
@@ -69,7 +71,11 @@ class LambdaHandlerTest(unittest.TestCase):
         )
         health = handler_module.prediction_handler(event("GET", "/api/health"), None)
         options = handler_module.prediction_handler(
-            event("GET", "/api/options", query="decision_time=2026-06-29T09%3A00"),
+            event(
+                "GET",
+                "/api/options",
+                query="decision_time=2026-06-29T09%3A00&mode=full_dock",
+            ),
             None,
         )
         prediction = handler_module.prediction_handler(
@@ -82,6 +88,7 @@ class LambdaHandlerTest(unittest.TestCase):
         self.assertEqual(health["statusCode"], 200)
         self.assertEqual(decoded(health)["rows"], 123)
         self.assertEqual(decoded(options)["requested_time"], "2026-06-29T09:00")
+        self.assertEqual(decoded(options)["mode"], "full_dock")
         self.assertEqual(decoded(prediction)["prediction"], {"station": 7})
         self.assertEqual(decoded(explanation)["explanation"], {"station": 7})
 
@@ -215,6 +222,28 @@ class LambdaHandlerTest(unittest.TestCase):
         self.assertEqual(
             decoded(response)["summary"],
             {"evaluated_actions": 10, "hits": 7, "precision": 0.7},
+        )
+
+    def test_real_reveal_service_keeps_full_dock_truth_separate(self) -> None:
+        handler_module._reset_services_for_tests()
+        response = handler_module.reveal_handler(
+            event(
+                "POST",
+                "/api/reveal",
+                {
+                    "mode": "full_dock",
+                    "decision_time": "2026-06-25T08:00:00+08:00",
+                    "station_ids": [910, 236],
+                },
+            ),
+            None,
+        )
+        self.assertEqual(response["statusCode"], 200)
+        payload = decoded(response)
+        self.assertEqual(payload["mode"], "full_dock")
+        self.assertEqual(
+            payload["summary"],
+            {"evaluated_actions": 2, "hits": 1, "precision": 0.5},
         )
 
     def test_real_prediction_and_explain_lambda_path_uses_no_truth(self) -> None:

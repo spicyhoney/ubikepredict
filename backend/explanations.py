@@ -94,6 +94,21 @@ FEATURE_LABELS: dict[str, str] = {
     "duration_90plus": "目前是否已缺車至少90分鐘",
 }
 
+FULL_DOCK_LABEL_OVERRIDES = {
+    "same_red_lag_30": "30分鐘前是否同為滿柱",
+    "same_red_lag_60": "60分鐘前是否同為滿柱",
+    "same_red_lag_90": "90分鐘前是否同為滿柱",
+    "same_red_lag_1d": "前一天同時段是否滿柱",
+    "same_red_lag_7d": "前一週同時段是否滿柱",
+    "opposite_red_lag_30": "30分鐘前是否缺車",
+    "opposite_red_lag_60": "60分鐘前是否缺車",
+    "opposite_red_lag_90": "90分鐘前是否缺車",
+    "same_red_count_past_90": "近90分鐘滿柱快照數",
+    "red_duration_capped_6": "目前滿柱已持續時間",
+    "red_duration_log1p_capped": "目前滿柱持續時間（模型轉換值）",
+    "duration_90plus": "目前是否已滿柱至少90分鐘",
+}
+
 
 _RATIO_FEATURES = {
     name
@@ -192,11 +207,15 @@ def display_feature_value(feature: str, value: Any) -> str:
     return str(value)
 
 
-def _factor(feature: str, value: Any, contribution: float) -> dict[str, Any]:
+def _factor(feature: str, value: Any, contribution: float, mode: str) -> dict[str, Any]:
     contribution = float(contribution)
     return {
         "feature": feature,
-        "label": FEATURE_LABELS.get(feature, "其他模型訊號"),
+        "label": (
+            FULL_DOCK_LABEL_OVERRIDES.get(feature, FEATURE_LABELS.get(feature, "其他模型訊號"))
+            if mode == "full_dock"
+            else FEATURE_LABELS.get(feature, "其他模型訊號")
+        ),
         "value_display": display_feature_value(feature, value),
         "contribution": contribution,
         "direction": "increase" if contribution >= 0 else "decrease",
@@ -209,6 +228,7 @@ def _select_top_factors(
     contributions: np.ndarray,
     top_positive: int,
     top_negative: int,
+    mode: str,
 ) -> list[dict[str, Any]]:
     positive = [index for index, value in enumerate(contributions) if value > 0]
     negative = [index for index, value in enumerate(contributions) if value < 0]
@@ -217,7 +237,7 @@ def _select_top_factors(
 
     selected = positive[:top_positive] + negative[:top_negative]
     factors = [
-        _factor(feature_names[index], row.iloc[index], float(contributions[index]))
+        _factor(feature_names[index], row.iloc[index], float(contributions[index]), mode)
         for index in selected
     ]
     return sorted(
@@ -233,6 +253,7 @@ def explain_frame(
     top_positive: int = 3,
     top_negative: int = 2,
     tolerance: float = 1e-6,
+    mode: str | None = None,
 ) -> list[dict[str, Any]]:
     """Return TreeSHAP explanations for every row in ``frame``.
 
@@ -246,6 +267,9 @@ def explain_frame(
         raise ValueError("tolerance must be a finite positive number")
     if frame.empty:
         return []
+    resolved_mode = mode or getattr(engine, "mode", "empty")
+    if resolved_mode not in {"empty", "full_dock"}:
+        raise ValueError("mode must be empty or full_dock")
 
     matrix = engine.model_matrix(frame)
     feature_names = list(engine.features)
@@ -290,6 +314,7 @@ def explain_frame(
                     contributions,
                     top_positive,
                     top_negative,
+                    resolved_mode,
                 ),
                 "disclaimer": SHAP_DISCLAIMER,
             }
@@ -304,6 +329,7 @@ def explain_row(
     top_positive: int = 3,
     top_negative: int = 2,
     tolerance: float = 1e-6,
+    mode: str | None = None,
 ) -> dict[str, Any]:
     """Convenience wrapper for a single input row."""
     if isinstance(row, pd.DataFrame):
@@ -320,6 +346,7 @@ def explain_row(
         top_positive=top_positive,
         top_negative=top_negative,
         tolerance=tolerance,
+        mode=mode,
     )[0]
 
 

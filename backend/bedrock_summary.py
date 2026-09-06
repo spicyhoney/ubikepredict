@@ -33,6 +33,9 @@ _STATION_FACT_FIELDS = (
     "route_order",
     "policy_label",
     "threshold",
+    "mode",
+    "event_label",
+    "outcome_label",
 )
 _FACTOR_FIELDS = ("feature", "label", "value_display", "contribution", "direction")
 
@@ -157,11 +160,15 @@ def template_operational_summary(
     """Build a stable Chinese summary without network or generative AI."""
     station_name = _safe_text(station_facts.get("station_name"), "此站")
     risk = _probability_text(station_facts.get("risk_probability"))
-    duration = _safe_text(station_facts.get("red_duration_display"), "目前為缺車狀態")
+    event_label = _safe_text(station_facts.get("event_label"), "缺車", 12)
+    outcome_label = _safe_text(station_facts.get("outcome_label"), f"仍{event_label}", 16)
+    duration = _safe_text(
+        station_facts.get("red_duration_display"), f"目前為{event_label}狀態"
+    )
 
     first_sentence = f"{station_name}{duration}"
     if risk is not None:
-        first_sentence += f"，模型估計30分鐘後仍缺車風險為{risk}。"
+        first_sentence += f"，模型估計30分鐘後{outcome_label}風險為{risk}。"
     else:
         first_sentence += "，模型建議持續關注。"
 
@@ -189,7 +196,7 @@ def template_operational_summary(
     except (TypeError, ValueError):
         route_order = None
     if route_order is not None and route_order > 0:
-        sections.append(f"目前列為巡補關注清單第{route_order}順位，仍需由營運人員綜合判斷。")
+        sections.append(f"目前列為調度關注清單第{route_order}順位，仍需由營運人員綜合判斷。")
     else:
         sections.append("是否採取行動仍需由營運人員綜合現場條件判斷。")
     sections.append(f"{SUMMARY_DISCLAIMER}。")
@@ -294,6 +301,8 @@ def _render_model_summary(
     risk = _probability_text(station_facts.get("risk_probability"))
     threshold = _probability_text(station_facts.get("threshold"))
     policy = _safe_text(station_facts.get("policy_label"), "目前政策")
+    event_label = _safe_text(station_facts.get("event_label"), "缺車", 12)
+    outcome_label = _safe_text(station_facts.get("outcome_label"), f"仍{event_label}", 16)
     factor_by_feature = {
         str(factor.get("feature")): factor
         for factor in shap_explanation.get("factors", [])
@@ -310,7 +319,7 @@ def _render_model_summary(
         for factor in selected
     )
     emphasis_text = {
-        "duration": "缺車持續狀態",
+        "duration": f"{event_label}持續狀態",
         "recent_change": "近期車輛變化",
         "historical_pattern": "歷史時段型態",
         "capacity": "場站容量與可用比例",
@@ -319,9 +328,9 @@ def _render_model_summary(
 
     if risk is not None and threshold is not None:
         comparison = "已達" if float(station_facts["risk_probability"]) >= float(station_facts["threshold"]) else "未達"
-        opening = f"{station_name}的30分鐘持續缺車風險為{risk}，{comparison}{policy}門檻{threshold}。"
+        opening = f"{station_name}的30分鐘{outcome_label}風險為{risk}，{comparison}{policy}門檻{threshold}。"
     elif risk is not None:
-        opening = f"{station_name}的30分鐘持續缺車風險為{risk}。"
+        opening = f"{station_name}的30分鐘{outcome_label}風險為{risk}。"
     else:
         opening = f"{station_name}目前需要持續觀察。"
 
@@ -331,7 +340,7 @@ def _render_model_summary(
     except (TypeError, ValueError):
         route_order = None
     action = (
-        f"目前列為巡補關注清單第{route_order}順位，仍需由營運人員綜合判斷。"
+        f"目前列為調度關注清單第{route_order}順位，仍需由營運人員綜合判斷。"
         if route_order is not None and route_order > 0
         else "是否採取行動仍需由營運人員綜合現場條件判斷。"
     )

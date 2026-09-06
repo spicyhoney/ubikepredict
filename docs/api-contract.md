@@ -15,14 +15,22 @@ AWS 使用 API Gateway HTTP API payload format 2.0。POST 請求必須使用 `Co
 
 確認預測服務、凍結模型與 truth-free 六月輸入已載入。這個路由在 Prediction Lambda，不會讀取 truth bucket。
 
+## 模式參數
+
+所有主要請求共用 `mode=empty|full_dock`：
+
+- `empty`（預設）：當下0車，預測30分鐘後是否仍0車；這是主模式。
+- `full_dock`：當下0空位，預測30分鐘後是否仍0空位；這是輔助模式。
+
 ## `GET /api/options`
 
-回傳已核對的歷史回放情境、兩種凍結警示政策與預設值。可使用 `?decision_time=...` 查詢該時點有哪些行政區候選。
+回傳指定模式已核對的歷史回放情境、兩種凍結警示政策與預設值。使用 `?mode=full_dock&decision_time=...` 可查滿柱輔助模式的時點與行政區；不傳 `mode` 就是 `empty`。
 
 ## `POST /api/predict`
 
 ```json
 {
+  "mode": "empty",
   "decision_time": "2026-06-29T09:00:00+08:00",
   "district": "三重區",
   "policy": "balanced",
@@ -30,12 +38,12 @@ AWS 使用 API Gateway HTTP API payload format 2.0。POST 請求必須使用 `Co
 }
 ```
 
-`action_limit` 可為 1～25，省略時預設 10。`policy` 可為 `balanced` 或 `strict`。
+`mode` 可為 `empty` 或 `full_dock`，省略時預設 `empty`。`action_limit` 可為 1～25，省略時預設 10。`policy` 可為 `balanced` 或 `strict`，門檻由模式各自的凍結設定決定。
 
 此端點只讀取 truth-free 輸入、凍結模型、設定與站點資料，不讀六月答案。回傳：
 
-- 當下所有 0 車候選；歷史長度不足者明確標示未評分。
-- 68 特徵經 LightGBM 與 Platt 校正後的持續缺車機率。
+- `empty` 的當下0車候選，或 `full_dock` 的當下0空位候選；歷史長度不足者明確標示未評分。
+- 各模式的 68 特徵經對應 LightGBM 與 Platt 校正後的持續失衡機率。
 - 先通過凍結門檻、再受 `action_limit` 限制的行動清單，不會硬湊名額。
 - 從最高風險站開始、再依相鄰距離串接的巡補順序示意；這不是實際派車最佳化。
 
@@ -43,6 +51,7 @@ AWS 使用 API Gateway HTTP API payload format 2.0。POST 請求必須使用 `Co
 
 ```json
 {
+  "mode": "empty",
   "decision_time": "2026-06-29T09:00:00+08:00",
   "district": "三重區",
   "station_id": 673,
@@ -57,6 +66,7 @@ AWS 使用 API Gateway HTTP API payload format 2.0。POST 請求必須使用 `Co
 
 ```json
 {
+  "mode": "empty",
   "decision_time": "2026-06-29T09:00:00+08:00",
   "target_time": "2026-06-29T09:30:00+08:00",
   "station": {
@@ -104,7 +114,7 @@ SHAP 由伺服器對同一筆 LightGBM 輸入計算。Bedrock 僅從 allow-liste
 }
 ```
 
-只有使用者按下揭曉後才由 Reveal 服務讀取六月 reference。每個站回傳「30分鐘後仍為0車」或「已恢復有車」，並以逐快照方式計算本案例 Precision；不使用 Episode 計分，也不虛構30分鐘後的精確車數。
+只有使用者按下揭曉後才由 Reveal 服務讀取對應的六月 reference。`empty` 回傳 `still_empty`，`full_dock` 回傳 `still_full_dock`，並共同提供 `still_imbalanced`。本案例 Precision 以逐站逐快照方式計算；不使用 Episode 計分，也不虛構30分鐘後的精確車數或空位數。
 
 在 AWS 上，此路由為公開 Demo API，但由獨立 Reveal Lambda 與 IAM role 處理。Prediction Lambda role 完全沒有 truth bucket 讀取權。因此報告可說「預測與揭曉權限隔離」，不可說「truth 對外完全無法取得」。
 
@@ -119,11 +129,11 @@ SHAP 由伺服器對同一筆 LightGBM 輸入計算。Bedrock 僅從 allow-liste
 
 | 本機 | AWS 對應 |
 |---|---|
-| truth-free Parquet、模型、config、站點 CSV | private runtime S3 |
-| `data/reference/june_all_eligible_decisions.parquet` | 權限分離的 private truth S3 |
+| 兩種模式的 truth-free Parquet、model、config，及共用站點 CSV | private runtime S3 |
+| 兩個六月 reference Parquet | 權限分離的 private truth S3 |
 | `backend/api.py` | 核心 DemoService，本機 HTTP 與 Lambda 共用 |
 | `backend/lambda_handler.py` | 兩個 API Gateway v2 Lambda handlers |
 | `/api/*` | API Gateway HTTP API routes |
 | `frontend/dist/client` | Amplify manual static deployment |
 
-AWS 只替換儲存、權限與服務位置；68 欄特徵順序、Platt 參數、模型檔及兩個門檻都不變。
+AWS 只替換儲存、權限與服務位置；兩種模式共用這些端點與同一部署腳本，只增加 S3 模型／config／input／truth 資產。各自的 68 欄順序、Platt 參數、模型檔與兩個門檻都不變，不需重訓。

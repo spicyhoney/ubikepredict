@@ -8,7 +8,7 @@
 
 - 靜態 Vinext 前端與 Amplify manual deployment 封裝流程。
 - API Gateway HTTP API、兩個 Linux/amd64 Lambda 容器、兩個私有 S3 bucket、最小權限 IAM、CORS、CloudWatch logs 與 API throttle 的 SAM/CloudFormation 模板。
-- Prediction Lambda 的 S3 runtime 資產下載與大小／SHA256 核對；Reveal Lambda 另行讀取 truth。
+- Prediction Lambda 的 S3 runtime 資產下載與大小／SHA256 核對；資產同時包含缺車主模式 `empty` 與滿柱輔助模式 `full_dock`，Reveal Lambda 另行讀取對應 truth。
 - API Gateway payload format 2.0 handlers，包含 `health`、`options`、`predict`、`explain`、`reveal`。
 - LightGBM `pred_contrib=True` 解釋、完整 68 特徵的中文名稱、受控 Bedrock Converse 摘要、輸出驗證與固定範本 fallback。
 - 前端 SHAP／營運摘要面板、地圖標記縮小與密集路線編號視覺避讓。
@@ -21,6 +21,8 @@
 - 未從公開 Amplify HTTPS 網址完成端到端演示、CORS、權限與 cloud/local parity 驗收。
 
 所以報告時可說「AWS-ready 程式與部署骨架已完成」，但在本頁的雲端驗收通過前，不可說「AWS／Bedrock 已部署成功」。
+
+兩種模式與全部必要資產已納入同一部署流程。理想的比賽現場工作仍只是：取得 credentials、確定 Region 與可用 Bedrock model／inference profile、執行部署與雲端驗收；不訓練模型、不重建特徵，也不現場重選門檻。
 
 ## 唯一主路徑
 
@@ -36,7 +38,7 @@ API Gateway HTTP API
                                          └─ private truth S3
 ~~~
 
-不需要 SageMaker：模型小、演示流量低，Lambda 容器已足夠。AWS 只改變儲存、權限、服務位置與公開網址，不重訓模型，不改 68 欄順序、Platt 參數或門檻。
+不需要 SageMaker：模型小、演示流量低，Lambda 容器已足夠。AWS 只改變儲存、權限、服務位置與公開網址；`empty` 與 `full_dock` 共用這套架構、端點與同一支部署腳本。不重訓任一模型，不改各自的 68 欄順序、Platt 參數或門檻。
 
 ## 現場開始前準備
 
@@ -95,10 +97,10 @@ $BedrockResourceArns = @(
 
 1. 驗證 SAM 模板。
 2. 透過 Docker/SAM 建置兩個 Lambda 容器映像並部署 CloudFormation stack。
-3. 把凍結 runtime 資產與 reveal truth 上傳到兩個不同的私有 S3 bucket。
+3. 把兩種模式的凍結 runtime 資產與 reveal truth 上傳到兩個不同的私有 S3 bucket。
 4. 以雲端 API URL 建置 Vinext 靜態網站，擋住任何 localhost 回退。
 5. 使用 Amplify manual deployment 上傳前端 ZIP。
-6. 執行雲端 health、predict、SHAP／摘要、reveal、CORS 與固定案例驗收；若使用 `-EnableBedrock`，摘要不是實際 `amazon_bedrock` 就會讓部署失敗。
+6. 執行雲端 health、缺車主案例、滿柱輔助案例、SHAP／摘要、reveal、CORS 與固定結果驗收；若使用 `-EnableBedrock`，摘要不是實際 `amazon_bedrock` 就會讓部署失敗。
 
 上述是部署腳本自動驗收範圍。Prediction role 對 truth 的 `AccessDenied`、實際 throttle、另一台裝置開啟，以及 cloud/local parity（需先啟動本機 API 並另傳 `-LocalBaseUrl`）仍要依本頁「雲端必做驗收」逐項完成；不能只看到 stack 成功就宣稱全部驗收完成。
 
@@ -140,6 +142,10 @@ releases/frozen-v1/model/lgbm_full.txt
 releases/frozen-v1/config/final_policy_freeze_before_may.json
 releases/frozen-v1/config/protocol_frozen_before_june.json
 replays/2026-06/input/dynamic_red_empty_2026_06_input.parquet
+releases/frozen-v1/model/lgbm_full_dock.txt
+releases/frozen-v1/config/final_policy_freeze_full_dock_before_may.json
+releases/frozen-v1/config/protocol_full_dock_frozen_before_june.json
+replays/2026-06/input/dynamic_red_full_2026_06_input.parquet
 stations/dim_station.csv
 ~~~
 
@@ -147,11 +153,12 @@ Truth bucket 只包含：
 
 ~~~text
 replays/2026-06/truth/june_all_eligible_decisions.parquet
+replays/2026-06/truth/june_full_dock_all_eligible_decisions.parquet
 ~~~
 
 兩個 bucket 都會啟用 Block Public Access、SSE-S3 與 Versioning。S3 loader 只接受程式中寫死的 allow-list keys，下載到 Lambda `/tmp/ubikepredict` 後必須通過檔案大小與 SHA256 才會被載入。
 
-Prediction Lambda role 只能讀 runtime bucket 指定 objects，沒有 truth bucket 權限；Reveal Lambda role 只能讀指定 truth object，不初始化 LightGBM、不呼叫 Bedrock。
+Prediction Lambda role 只能讀 runtime bucket 中兩種模式的指定 objects，沒有 truth bucket 權限；Reveal Lambda role 只能讀兩個指定 truth objects，不初始化 LightGBM、不呼叫 Bedrock。
 
 但 `POST /api/reveal` 是為了比賽回放而公開的 API 路由，使用者按「揭曉」後可取得所選站點的 30 分鐘後結果。安全主張應是「預測過程與 Prediction role 無法讀答案」，不是「答案從外部完全取得不到」。
 
@@ -174,6 +181,8 @@ POST /api/predict
 POST /api/explain
 POST /api/reveal
 ~~~
+
+`GET /api/options` 使用 query parameter `mode=empty|full_dock`；`predict`、`explain`與 `reveal` 的 JSON body 使用同名 `mode`。省略時一律預設 `empty`，確保舊版缺車 Demo 仍相容。兩種模式共用同一組 API Gateway 路由，不另建第二套端點。
 
 POST 必須使用 `Content-Type: application/json`（可帶 charset），JSON body 不得超過 64KB。API Gateway 的預設 throttle 為 3 requests/second、burst 10；較慢的 `POST /api/explain` 另設 1 request/second、burst 2。數值是 CloudFormation 參數，現場若要改必須有理由並重新驗收。
 
@@ -206,13 +215,14 @@ CI 通過只能證明程式、模板與容器可建置，不能取代實際 AWS 
 1. 本機全套測試通過。
 2. 公開 `/api/health` 與 `/api/options` 正常。
 3. 預設三重案例為 23 個當下缺車、21 個可評分、12 個過平衡門檻、最終 Top-10。
-4. Reveal 預設案例為 7/10，重複 station ID 不會灌高結果。
-5. Cloud 與本機同站機率誤差不超過 `2e-7`。
-6. Prediction role 讀 truth object 必須 `AccessDenied`；Reveal role 可讀指定 truth object。
-7. SHAP 貢獻加總等於 raw score，且不含答案欄。
-8. Bedrock 啟用時，`/api/explain` 實際回 `provider: "amazon_bedrock"`；關閉或故意讓其失敗時仍有 `template` fallback。
-9. Amplify 無痕視窗可完成 predict、點站 explain 與 reveal，全程不依賴 localhost。
-10. 非白名單 Origin 被擋，真實 Amplify origin 可用；請求不會在網頁暴露 AWS 金鑰、S3 truth URL 或答案欄。
+4. `full_dock` 板橋案例為 6 個當下滿柱、6 個可評分、2 個過平衡門檻，Reveal 為 1/2。
+5. Reveal 缺車預設案例為 7/10，重複 station ID 不會灌高結果。
+6. Cloud 與本機同站機率誤差不超過 `2e-7`，兩種模式都要比對。
+7. Prediction role 讀任一 truth object 必須 `AccessDenied`；Reveal role 只可讀指定 truth objects。
+8. 兩種模式的 SHAP 貢獻加總都等於各自 raw score，且不含答案欄。
+9. Bedrock 啟用時，`/api/explain` 實際回 `provider: "amazon_bedrock"`；關閉或故意讓其失敗時仍有 `template` fallback。
+10. Amplify 無痕視窗可切換 `empty` 與 `full_dock`，並完成 predict、點站 explain 與 reveal，全程不依賴 localhost。
+11. 非白名單 Origin 被擋，真實 Amplify origin 可用；請求不會在網頁暴露 AWS 金鑰、S3 truth URL 或答案欄。
 
 ## Demo 現場檢查
 
@@ -232,3 +242,5 @@ CI 通過只能證明程式、模板與容器可建置，不能取代實際 AWS 
 - Bedrock 在實際帳號／Region 成功回應並通過 allow-list 驗證，失敗時 fallback 仍可用。
 - Cloud/local parity、CORS、throttle、reveal 與權限邊界均驗收完成。
 - 沒有使用 6 月重訓、重校正或重選門檻。
+
+`full_dock` 的六月 3,776 筆回溯結果為：平衡版 Precision 47.71%、Recall 17.20%；嚴格證據版 Precision 56.79%、Recall 10.14%。六月未參與訓練、Platt 校正或門檻選擇，但因專案過程中已存在六月快取，報告時應說「凍結後回溯核對」，不宣稱為全新前瞻盲測。

@@ -1,16 +1,16 @@
-# YouBike 30 分鐘缺車風險：可攜推論包
+# YouBike 30 分鐘持續失衡風險：可攜推論包
 
 這個 Repository 已包含在另一台 Windows 筆電重現 Demo 所需的互動前端、本機 API、凍結模型、六月特徵、站點座標、門檻、機率校正設定及核對資料。正常 Demo 不需要 1～6 月原始 CSV，也不需要重新訓練。
 
 ## 作品現在能做什麼
 
-官方地圖已能顯示「現在是否0車」；本作品在站點已亮紅燈時，預測它30分鐘後是否仍為0車。互動 Demo 會：
+官方地圖已能顯示當下失衡；本作品以「當下0車，預測30分鐘後是否仍0車」為主要模式，並增加「當下0空位，預測30分鐘後是否仍0空位」的 `full_dock` 輔助模式。互動 Demo 會：
 
-- 以真實六月歷史情境執行 LightGBM 推論，不使用前端寫死分數。
-- 顯示全部當下0車候選，並標出因歷史長度不足而未評分的站。
+- 以真實六月歷史情境執行兩個已凍結 LightGBM 的推論，不使用前端寫死分數。
+- 顯示主模式當下0車或輔助模式當下0空位候選，並標出歷史長度不足而未評分的站。
 - 先套凍結門檻，再取最多10站的有限行動清單；不會硬湊名額。
 - 依風險與相鄰距離產生巡補順序示意，並清楚標示它不是實際派車最佳化。
-- 按下揭曉後才讀六月答案，逐站顯示「仍為0車／已恢復有車」及本案例 Precision。
+- 按下揭曉後才讀六月答案，逐站顯示「仍失衡／已恢復」及本案例 Precision。
 - 點選可評分站點可看 LightGBM SHAP 推升／降低風險因素；本機以固定範本摘要，AWS 模式才會在實際成功呼叫後標示 Amazon Bedrock。
 - 在支援 WebMCP 的瀏覽器中，AI 助理也能操作同一套「執行預測／揭曉結果」流程。
 
@@ -49,36 +49,47 @@ Smoke test 會驗證模型與資料檔雜湊、門檻兩側 golden cases、未�
 ## 查詢指定時間、行政區與 Top-N
 
 ```powershell
-.\scripts\run-demo.ps1 -Datetime "2026-06-23 19:30" -District "板橋區" -Policy balanced -Top 10
+.\scripts\run-demo.ps1 -Mode empty -Datetime "2026-06-23 19:30" -District "板橋區" -Policy balanced -Top 10
+
+# 滿柱輔助模式
+.\scripts\run-demo.ps1 -Mode full_dock -Datetime "2026-06-25 08:00" -District "板橋區" -Policy balanced -Top 10
 ```
 
-政策可選：
+模式可選 `empty` 與 `full_dock`，預設仍為缺車主模式 `empty`。兩種模式的凍結門檻不同：
 
-- `balanced`：校正機率至少 56.681205%，適合展示較完整的巡補候選。
-- `strict`：校正機率至少 65.177727%，警示較少、要求較高。
+- `empty`：`balanced` 為 56.681205%，`strict` 為 65.177727%。
+- `full_dock`：`balanced` 為 42.059604%，`strict` 為 48.107435%。
 - `all`：不先套門檻，直接列出該篩選範圍風險最高的站點。
 
 也可直接呼叫 Python，輸出 JSON 供離線檢視或其他工具使用；互動前端本身呼叫的是 `/api/*`，不是這個 CLI 檔案：
 
 ```powershell
-.\.venv\Scripts\python.exe .\backend\inference.py --datetime "2026-06-23 19:30" --district "板橋區" --policy all --top 10 --format json --output .\demo-output.json
+.\.venv\Scripts\python.exe .\backend\inference.py --mode empty --datetime "2026-06-23 19:30" --district "板橋區" --policy all --top 10 --format json --output .\demo-output.json
 ```
 
 ## 資料與模型分層
 
 ```text
 model/lgbm_full.txt
-  凍結 LightGBM；只做推論，不在 Demo 重新訓練。
+  缺車主模式的凍結 LightGBM。
+model/lgbm_full_dock.txt
+  滿柱輔助模式的凍結 LightGBM；兩者都只做推論。
 config/final_policy_freeze_before_may.json
-  68 欄特徵順序、Platt 參數、平衡與嚴格門檻。
+config/final_policy_freeze_full_dock_before_may.json
+  兩種模式各自的 68 欄順序、Platt 參數與兩個門檻。
 config/protocol_frozen_before_june.json
-  六月開封前凍結的類別 schema 與實驗協議。
+config/protocol_full_dock_frozen_before_june.json
+  兩種模式各自的類別 schema 與實驗協議。
 data/source/dynamic_red_empty_2026_06.parquet
   六月封存特徵快取；含 92,882 筆候選快照。
 data/source/dynamic_red_empty_2026_06_input.parquet
   前端 API 專用輸入；已物理移除答案與未來資訊欄位。
 data/reference/june_all_eligible_decisions.parquet
   27,962 筆一次性六月核對結果，只供測試與揭曉。
+data/source/dynamic_red_full_2026_06.parquet
+data/source/dynamic_red_full_2026_06_input.parquet
+data/reference/june_full_dock_all_eligible_decisions.parquet
+  滿柱輔助模式的封存快取、truth-free 輸入與 3,776 筆核對結果。
 data/stations/dim_station.csv
   站名、行政區、經緯度與容量範圍。
 ```
@@ -87,7 +98,7 @@ data/stations/dim_station.csv
 
 ## 推論公式與防洩漏
 
-流程固定為：六月特徵 → 依 freeze 的 68 欄與順序建矩陣 → LightGBM `raw_score=True` → Platt sigmoid → 套用凍結門檻。
+兩種模式的流程都固定為：對應的六月 truth-free 特徵 → 依各自 freeze 的 68 欄與順序建矩陣 → LightGBM `raw_score=True` → 各自的 Platt sigmoid → 各自的凍結門檻。
 
 六月 source 為了離線稽核仍保留 `y_same_30` 與 `future_30_*`。推論程式採「特徵白名單」，只選 freeze JSON 列出的 68 欄；答案、未來資訊及 reference 絕不會傳入模型。部署前端時也不要把整個 `data/` 當公開靜態目錄。
 
@@ -96,11 +107,13 @@ data/stations/dim_station.csv
 - 2026 年 1～3 月：模型訓練。
 - 2026 年 4 月：機率校正、門檻選擇及 gate。
 - 2026 年 5 月：凍結後的探索性確認，未用於重訓或選門檻。
-- 2026 年 6 月：一次性最終測試與 Demo 回放；沒有用來調參。
+- 2026 年 6 月：沒有參與訓練、機率校正或門檻選擇；用於凍結結果核對與 Demo 回放。但六月特徵／結果快取已在專案過程中存在，特別是 `full_dock` 只能稱為凍結後回溯核對，不應包裝成全新、從未開封的前瞻盲測。
 
 ## GitHub 應放與不應放的內容
 
-本專案內的前後端程式、模型、兩份 JSON、三份 Parquet、站點 CSV，以及 `analysis/reports/` 中挑選過的彙整報告都應提交。不要提交 `.venv`、`node_modules`、AWS 金鑰、真正的 `.env`、大型原始 CSV、`tmp` 或未整理的舊實驗輸出。比賽前請在實際筆電全新 Clone 一次並跑 smoke test，另將 Repository ZIP 備份到 OneDrive。
+`full_dock` 的六月 3,776 筆回溯核對：平衡版 Precision 47.71%、Recall 17.20%；嚴格證據版 Precision 56.79%、Recall 10.14%。六月未參與訓練、校正或門檻選擇，但因快取已在專案過程中存在，這是凍結後歷史回溯，不宣稱為全新盲測。
+
+本專案內的前後端程式、兩種凍結模型與對應 config／Parquet、站點 CSV，以及 `analysis/reports/` 中挑選過的彙整報告都應提交。不要提交 `.venv`、`node_modules`、AWS 金鑰、真正的 `.env`、大型原始 CSV、`tmp` 或未整理的舊實驗輸出。比賽前請在實際筆電全新 Clone 一次並跑 smoke test，另將 Repository ZIP 備份到 OneDrive。
 
 ## AWS-ready 狀態：程式已備妥，尚未真正上雲
 
@@ -108,7 +121,7 @@ data/stations/dim_station.csv
 
 - 靜態前端封裝與 Amplify manual deployment 流程。
 - API Gateway HTTP API、兩個 Lambda 容器、私有 runtime／truth S3 與最小權限 IAM 的 SAM 模板。
-- S3 冷啟動下載、固定檔名／大小／SHA256 核對，以及 API Gateway v2 Lambda handlers。
+- S3 冷啟動下載、固定檔名／大小／SHA256 核對，以及 API Gateway v2 Lambda handlers；`empty` 與 `full_dock` 共用同一架構、端點與部署腳本。
 - LightGBM `pred_contrib=True` 的 SHAP 原始分數貢獻、中文欄位名與受控 Bedrock 摘要；無權限、關閉、逾時或輸出不合規時會改用明確標示的固定範本。
 - 部署、前端封裝、雲端驗收、清理腳本與 GitHub Actions CI。
 
@@ -116,4 +129,4 @@ data/stations/dim_station.csv
 
 比賽主路徑是「Amplify manual static 公開前端 → API Gateway HTTP API → 兩個權限分離的 Lambda 容器 → 私有 S3；Prediction Lambda 另呼叫 Bedrock 整理 SHAP」。Prediction role 無權讀取 truth bucket，但 `reveal` 是為了演示回放而公開的 API，不能聲稱答案「外部完全取得不到」。
 
-現場只應剩下：取得短期 AWS 憑證，確認 Region 與 Bedrock model／inference profile 存取權，執行 `deploy-aws.ps1`，再完成腳本與人工雲端驗收。腳本會核對固定 API 案例、SHAP、Bedrock（啟用時）、Amplify 頁面與 CORS；IAM 的 truth `AccessDenied`、throttle、跨裝置操作及可選的 cloud/local parity 仍需依清單驗證。完整指令與 Definition of Done 見 [AWS 現場交接](docs/aws-handoff.md)。
+現場只應剩下：取得短期 AWS 憑證，確認 Region 與 Bedrock model／inference profile 存取權，執行同一支 `deploy-aws.ps1`，再完成兩種模式的腳本與人工雲端驗收。不需現場重訓任一模型。腳本會核對固定 API 案例、SHAP、Bedrock（啟用時）、Amplify 頁面與 CORS；IAM 的 truth `AccessDenied`、throttle、跨裝置操作及可選的 cloud/local parity 仍需依清單驗證。完整指令與 Definition of Done 見 [AWS 現場交接](docs/aws-handoff.md)。

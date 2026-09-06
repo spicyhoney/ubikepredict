@@ -49,6 +49,8 @@ class FrozenBundleSmokeTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.engine = FrozenYouBikeModel()
         cls.source = load_demo_source()
+        cls.full_dock_engine = FrozenYouBikeModel(mode="full_dock")
+        cls.full_dock_source = load_demo_source(mode="full_dock")
 
     def test_manifest_files(self) -> None:
         manifest = json.loads((ROOT / "MANIFEST.json").read_text(encoding="utf-8"))
@@ -126,7 +128,39 @@ class FrozenBundleSmokeTest(unittest.TestCase):
         )
         print(f"Verified {len(compared):,} eligible rows; max probability diff={max_diff:.3g}")
 
+    def test_full_dock_population_matches_frozen_reference(self) -> None:
+        eligible = select_eligible_june(self.full_dock_source)
+        actual = self.full_dock_engine.predict_frame(eligible, attach_stations=False)
+        reference = pd.read_parquet(
+            ROOT / "data/reference/june_full_dock_all_eligible_decisions.parquet",
+            columns=[
+                "datetime",
+                "station_id",
+                "p_lgbm_full",
+                "alert_balanced",
+                "alert_strict",
+            ],
+        ).rename(columns={"p_lgbm_full": "expected_p"})
+        compared = actual.merge(
+            reference,
+            on=["datetime", "station_id"],
+            validate="one_to_one",
+        )
+        self.assertEqual(len(eligible), 3_776)
+        self.assertEqual(len(compared), len(reference))
+        max_diff = float(np.max(np.abs(compared["p_lgbm_full"] - compared["expected_p"])))
+        self.assertLessEqual(max_diff, 2e-7)
+        np.testing.assert_array_equal(
+            compared["alert_secondary_balanced"], compared["alert_balanced"]
+        )
+        np.testing.assert_array_equal(
+            compared["alert_primary_strict"], compared["alert_strict"]
+        )
+        print(
+            f"Verified {len(compared):,} full-dock rows; "
+            f"max probability diff={max_diff:.3g}"
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
-
