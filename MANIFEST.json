@@ -91,20 +91,20 @@
     },
     {
       "path": "scripts/run-demo.ps1",
-      "bytes": 762,
-      "sha256": "ce756f633513235dd23e9ee2f731e81714c08301a7ab8579007638c43d409d97",
+      "bytes": 752,
+      "sha256": "f68cec4a37dade00d31994fc0093f89404387d392ff8fd0ff99bc7fa0ce14615",
       "purpose": "One-command time, district, policy and Top-N demo runner."
     },
     {
       "path": "scripts/setup.ps1",
-      "bytes": 883,
-      "sha256": "698dac854a49f9b4c755baf61f6862a38e130cefacd46c4ff360851e8cf3cf33",
+      "bytes": 859,
+      "sha256": "03dfd5bf677e27aed8bce9cda97ab308e0c353de848b9ba5927a25a1ca71ceba",
       "purpose": "Creates a local Python environment and installs pinned dependencies."
     },
     {
       "path": "scripts/smoke-test.ps1",
-      "bytes": 362,
-      "sha256": "1f8f2e82535805d9c4aba07b5a47314b4f05a3812c5a2780eb24e87000620ec6",
+      "bytes": 352,
+      "sha256": "3fb79274d99bee4f615c4eb8628c7f59bbe454c569b84e8c7bc4537cb78dffa5",
       "purpose": "One-command portable-bundle verification."
     },
     {

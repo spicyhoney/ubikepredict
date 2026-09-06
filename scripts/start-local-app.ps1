@@ -20,18 +20,18 @@ $ApiOutput = Join-Path $RuntimeRoot "api.stdout.log"
 $ApiError = Join-Path $RuntimeRoot "api.stderr.log"
 
 if (-not (Test-Path -LiteralPath $Python)) {
-    throw "尚未建立 Python 環境，請先執行 scripts\setup.ps1。"
+    throw "Python environment not found. Run scripts\setup.ps1 first."
 }
 if (-not (Test-Path -LiteralPath $Vinext)) {
-    throw "尚未安裝前端套件，請先執行 scripts\setup-frontend.ps1。"
+    throw "Frontend dependencies not found. Run scripts\setup-frontend.ps1 first."
 }
 
 New-Item -ItemType Directory -Path $RuntimeRoot -Force | Out-Null
 
 $BusyPorts = @(Get-NetTCPConnection -State Listen -LocalPort 3000, 8000 -ErrorAction SilentlyContinue)
 if ($BusyPorts.Count -gt 0) {
-    $PortList = ($BusyPorts.LocalPort | Sort-Object -Unique) -join "、"
-    throw "連接埠 $PortList 已被使用。請先關閉舊的 Demo 視窗，再重新執行本腳本。"
+    $PortList = ($BusyPorts.LocalPort | Sort-Object -Unique) -join ", "
+    throw "Port $PortList is already in use. Close the old Demo window and try again."
 }
 
 $ApiProcess = Start-Process `
@@ -62,11 +62,11 @@ try {
         if (Test-Path -LiteralPath $ApiError) {
             Get-Content -LiteralPath $ApiError | Write-Host
         }
-        throw "模型服務未能在10秒內啟動。詳細錯誤位於 .runtime\api.stderr.log。"
+        throw "The model API did not start within 10 seconds. See .runtime\api.stderr.log."
     }
 
-    Write-Host "Demo 已啟動：http://localhost:3000"
-    Write-Host "按 Ctrl+C 可同時停止前端與模型服務。"
+    Write-Host "Demo started: http://localhost:3000"
+    Write-Host "Press Ctrl+C to stop both the frontend and model API."
     Push-Location $FrontendRoot
     try {
         & $Vinext dev

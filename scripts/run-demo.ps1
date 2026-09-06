@@ -14,7 +14,7 @@ Set-StrictMode -Version Latest
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $Python = Join-Path $RepoRoot ".venv\Scripts\python.exe"
 if (-not (Test-Path -LiteralPath $Python)) {
-    throw "尚未建立 .venv，請先執行 scripts\setup.ps1。"
+    throw ".venv not found. Run scripts\setup.ps1 first."
 }
 $Arguments = @(
     (Join-Path $RepoRoot "backend\inference.py"),
@@ -27,4 +27,3 @@ if ($District) {
     $Arguments += @("--district", $District)
 }
 & $Python @Arguments
-

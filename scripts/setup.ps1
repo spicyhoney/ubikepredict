@@ -15,7 +15,7 @@ if (-not (Test-Path -LiteralPath $VenvPython)) {
     } else {
         $Python = Get-Command python -ErrorAction SilentlyContinue
         if ($null -eq $Python) {
-            throw "找不到 Python。請先安裝 64-bit Python 3.12，再重新執行。"
+            throw "Python not found. Install 64-bit Python 3.12 and try again."
         }
         & $Python.Source -m venv $VenvDir
     }
@@ -23,5 +23,4 @@ if (-not (Test-Path -LiteralPath $VenvPython)) {
 
 & $VenvPython -m pip install --upgrade pip
 & $VenvPython -m pip install -r (Join-Path $RepoRoot "requirements.txt")
-Write-Host "安裝完成。下一步可執行 scripts\smoke-test.ps1。"
-
+Write-Host "Setup complete. Next run scripts\smoke-test.ps1."
