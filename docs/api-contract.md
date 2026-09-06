@@ -47,6 +47,6 @@
 | `data/reference/` | 權限分離的 S3 `demo/truth/` |
 | `backend/api.py` | Lambda 容器映像或 SageMaker endpoint 前的服務層 |
 | `/api/*` | API Gateway 路由 |
-| `frontend/` | Amplify Hosting 或 S3 + CloudFront |
+| `frontend/` | Amplify Hosting（比賽必做；目前仍需補可部署的static export或相容adapter） |
 
 AWS 只替換儲存、權限與服務位置；68欄特徵順序、Platt參數、模型檔及兩個門檻不可因搬遷而改變。模型檔、輸入檔與揭曉答案各有獨立環境變數，不互相推導路徑。

@@ -1,13 +1,13 @@
 # AWS 現場交接：S3、Lambda、API Gateway、SHAP、Bedrock
 
-這是比賽現場的實作清單，不是完成宣告。開始前先讀 [專案完整交接](project-handoff.md)。目前 Repository 已完成本機模型、API與前端；本文件中標示「待完成」的 AWS、SHAP及 Bedrock 程式仍需在有 AWS 帳號的環境實作與驗收。
+這是比賽現場的實作清單，不是完成宣告。開始前先讀 [專案完整交接](project-handoff.md)。目前 Repository 已完成本機模型、API與前端；所有不需帳號的 AWS、SHAP及 Bedrock 程式應在賽前完成，現場只保留建立資源、部署與雲端驗收。
 
 ## 建議只走這條主路
 
 依目前約1.24MB模型、2.86MB truth-free輸入及低頻 Demo 流量，第一版採：
 
 ~~~text
-本機前端（先求穩定，雲端託管為選配）
+Amplify Hosting 公開前端（比賽必做；本機前端保留為備援）
   ↓ NEXT_PUBLIC_API_BASE_URL
 API Gateway HTTP API
   ├─ health / options / predict → Prediction Lambda 容器
@@ -34,8 +34,21 @@ API Gateway HTTP API
 | LightGBM pred_contrib／SHAP原因 | 待完成 |
 | Bedrock Runtime呼叫與fallback | 待完成 |
 | 前端「AI營運摘要」面板 | 待完成 |
+| Amplify可部署前端與公開HTTPS驗收 | 待完成 |
 
 重要：backend/api.py 是本機 ThreadingHTTPServer，不是 Lambda handler；現有 UBIKE_*_PATH 只接受本機路徑，不能直接填 s3://。
+
+### 取得 AWS 憑證前必須完成
+
+- [ ] 凍結雲端 API schema，包含 LightGBM、SHAP、Bedrock provider與fallback欄位。
+- [ ] 完成S3 downloader、Lambda handlers、Linux容器及本機mock測試。
+- [ ] 完成LightGBM貢獻、中文原因、Bedrock受控摘要與失敗fallback。
+- [ ] 完成AI摘要面板，並修正地圖標記過大、密集站點編號重疊及自動縮放。
+- [ ] 產生Amplify可部署產物；production build不得回退到localhost API。
+- [ ] 完成IaC、最小權限IAM、部署／清除腳本及GitHub CI。
+- [ ] 一個指令通過13項模型/API測試、前端build與容器build。
+
+完成以上項目後，現場才只需登入帳號、選Region與Bedrock model、建立資源、填入正式Origin/API URL並做cloud/local parity驗收。
 
 ## 0. 新筆電與帳號先確認
 
@@ -142,14 +155,16 @@ NEXT_PUBLIC_API_BASE_URL
 建議新增，但目前尚未實作：
 
 ~~~text
-AWS_REGION
 UBIKE_RUNTIME_BUCKET
 UBIKE_TRUTH_BUCKET
 UBIKE_RELEASE_ID=frozen-v1
 BEDROCK_ENABLED=true
 BEDROCK_MODEL_ID=<現場已取得存取權的model或inference profile>
+BEDROCK_REGION=<選填；省略時直接讀Lambda提供的AWS_REGION>
 BEDROCK_TIMEOUT_SECONDS=<短於API Gateway總timeout>
 ~~~
+
+`AWS_REGION` 是 Lambda 自動提供的保留環境變數，不可在 function configuration 自訂。只有 Bedrock 需要跨區時才另外設定 `BEDROCK_REGION`。
 
 Lambda容器是Linux且檔案系統唯讀，只有 /tmp 可寫。從Windows建置時明確使用 linux/amd64；若選ARM，LightGBM、NumPy、Pandas及PyArrow都要重新驗證。
 
@@ -239,7 +254,7 @@ API Gateway URL確定後，在 frontend/.env.local 設：
 NEXT_PUBLIC_API_BASE_URL=https://<api-id>.execute-api.<region>.amazonaws.com
 ~~~
 
-這是前端build-time值；改URL後必須重新啟動或build。先讓本機前端穩定呼叫AWS API；Amplify Hosting是最後選配，不要讓前端託管阻塞核心Demo。
+這是前端build-time值；改URL後必須重新啟動或build。本機前端先用於開發與備援，但比賽完成版必須部署至Amplify Hosting，並以無痕視窗或另一台裝置驗證完整predict與reveal都不依賴localhost。
 
 ## 7. API Gateway與CORS
 

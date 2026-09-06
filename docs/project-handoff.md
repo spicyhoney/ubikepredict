@@ -110,7 +110,15 @@ Top-K 是營運清單上限，不是模型評分方式。先過機率門檻，�
 - 前端「主要原因／AI營運摘要」面板。
 - Amazon Bedrock 呼叫、prompt、JSON驗證、快取及失敗 fallback。
 - S3下載器、Lambda handler／容器、API Gateway與IAM。
-- AWS上的端到端驗收；前端雲端部署也是選配而非既成事實。
+- AWS上的端到端驗收，以及比賽必做的Amplify公開前端部署。
+
+## 前端上雲與視覺待辦
+
+- 目前Vinext production build可成功，但產物是server/Worker bundle，尚非可直接交給Amplify或S3的靜態網站。
+- Production build必須強制提供正式API URL，不可默默回退至 `http://127.0.0.1:8000`。
+- 地圖一般站點標記應縮小，只放大選取站；路線順位使用小型編號徽章。
+- 密集站點須加入編號避讓、分群或點擊展開，避免多個數字堆疊。
+- 根據行政區與Top-K路線自動調整地圖範圍；完整站名與原因留在清單／側欄顯示。
 
 SHAP 是原因來源；Bedrock只能整理已提供的 SHAP 與站點事實，不得自行發明原因、改風險分數、改門檻或決定清單。
 

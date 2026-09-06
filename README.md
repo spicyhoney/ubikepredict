@@ -105,4 +105,4 @@ data/stations/dim_station.csv
 
 未串 AWS 時，本包已可離線完整推論與操作前端。目前尚未完成 S3 loader、Lambda handler、API Gateway、SHAP、Bedrock client及AI摘要介面，不能把架構規劃說成已部署。
 
-現場建議主路徑是「本機前端 → API Gateway HTTP API → 兩個權限分離的 Lambda 容器 → 私有S3；Prediction Lambda另呼叫Bedrock整理SHAP」。AWS只替換部署、權限、儲存與API位置，不得改動68欄順序、校正參數或門檻。完整步驟、環境變數、IAM與Definition of Done見 [AWS 現場交接](docs/aws-handoff.md)。
+比賽主路徑是「Amplify公開前端 → API Gateway HTTP API → 兩個權限分離的 Lambda 容器 → 私有S3；Prediction Lambda另呼叫Bedrock整理SHAP」，本機前後端只作開發與斷網備援。AWS只替換部署、權限、儲存與API位置，不得改動68欄順序、校正參數或門檻。完整步驟、環境變數、IAM與Definition of Done見 [AWS 現場交接](docs/aws-handoff.md)。

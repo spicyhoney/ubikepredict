@@ -79,8 +79,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 6433,
-      "sha256": "acc8436762b0cd74baf98bad00c1882312290a3edf2bb2138fd99c64d423ce63",
+      "bytes": 6479,
+      "sha256": "06ece5d23962ff08ce0e92edbc12da9605962014f991d8a83f57bc07715920ac",
       "purpose": "Traditional Chinese setup, testing, CLI, data-boundary and AWS handoff guide."
     },
     {
@@ -103,8 +103,8 @@
     },
     {
       "path": "scripts/smoke-test.ps1",
-      "bytes": 352,
-      "sha256": "3fb79274d99bee4f615c4eb8628c7f59bbe454c569b84e8c7bc4537cb78dffa5",
+      "bytes": 741,
+      "sha256": "ab43d25eb43c5edee1907a76bb9da5c9beffaba60b1ea39d60f2a304fc00252c",
       "purpose": "One-command portable-bundle verification."
     },
     {
