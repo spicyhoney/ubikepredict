@@ -34,7 +34,7 @@ Parameters:
     Description: Model ID or inference-profile ID made available by the competition account.
   BedrockModelResourceArns:
     Type: CommaDelimitedList
-    Default: ""
+    Default: "arn:aws:bedrock:us-east-1::foundation-model/disabled-placeholder"
     Description: Exact Bedrock resources allowed by the prediction role. For a cross-Region profile include its ARN and every required destination or global foundation-model ARN from AWS guidance.
   BedrockRegion:
     Type: String
@@ -103,7 +103,7 @@ Rules:
                 - Fn::Join:
                     - ","
                     - Ref: BedrockModelResourceArns
-                - ""
+                - "arn:aws:bedrock:us-east-1::foundation-model/disabled-placeholder"
         AssertDescription: BedrockModelResourceArns is required when BedrockEnabled is true.
 
 Conditions:
