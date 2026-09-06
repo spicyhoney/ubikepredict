@@ -15,6 +15,14 @@
 
 API 契約見 [docs/api-contract.md](docs/api-contract.md)，一分鐘展示流程見 [docs/demo-runbook.md](docs/demo-runbook.md)。
 
+## 新筆電／新對話從這裡接手
+
+- [專案完整交接](docs/project-handoff.md)：預測問題、資料切分、68項凍結特徵、模型資產、已做實驗、六月結果、不可更動原則及新對話提示。
+- [AWS 現場交接](docs/aws-handoff.md)：S3、Lambda、API Gateway、IAM、SHAP、Bedrock、前端接法及逐項驗收清單。
+- [模型卡](docs/model-card.md)：凍結模型、Platt公式、門檻與限制。
+
+新對話不得只看前端畫面猜測專案狀態；必須先讀上述文件並執行 smoke test。本專案現場只搬移已凍結模型做推論，不重新訓練，也不得用六月重新調參。
+
 ## 從資料分析走到最終問題
 
 專案不是先選模型再找用途，而是先分析失衡時段、事件持續時間、重要站定義與既有介入痕跡，再逐步測試逐快照風險、門檻、Top-K 與加權標籤。完整的 10 份 Excel 證據與各階段決策整理在 [分析歷程](analysis/README.md)。這些工作簿保留探索過程；目前實作與最終數字仍以本頁及 [模型卡](docs/model-card.md) 為準。
@@ -95,4 +103,6 @@ data/stations/dim_station.csv
 
 ## AWS 串接邊界
 
-未串 AWS 時，本包已可離線完整推論與操作前端。之後可把 `backend/api.py` 包成 Lambda 容器映像或 SageMaker Endpoint、把模型輸入與揭曉答案分開存進 S3，再用 API Gateway 接既有前端；AWS 只替換部署、權限、儲存與 API 位置，不應改動68欄順序、校正參數或門檻。正式前端網域須加入 `UBIKE_ALLOWED_ORIGINS` 白名單。
+未串 AWS 時，本包已可離線完整推論與操作前端。目前尚未完成 S3 loader、Lambda handler、API Gateway、SHAP、Bedrock client及AI摘要介面，不能把架構規劃說成已部署。
+
+現場建議主路徑是「本機前端 → API Gateway HTTP API → 兩個權限分離的 Lambda 容器 → 私有S3；Prediction Lambda另呼叫Bedrock整理SHAP」。AWS只替換部署、權限、儲存與API位置，不得改動68欄順序、校正參數或門檻。完整步驟、環境變數、IAM與Definition of Done見 [AWS 現場交接](docs/aws-handoff.md)。
