@@ -108,6 +108,7 @@ button, select { font: inherit; }
 .metric-card small { color: #617d89; font-size: 11px; }
 
 .workspace { display: grid; grid-template-areas: "map action" "insight insight"; grid-template-columns: minmax(0, 1.55fr) minmax(400px, .85fr); gap: 14px; min-height: 545px; }
+.mobile-view-tabs { display: none; }
 .map-shell, .action-panel, .insight-panel { border: 1px solid #1d3b49; border-radius: 17px; background: #091b25; box-shadow: 0 18px 50px #020a0f55; overflow: hidden; }
 .map-shell { grid-area: map; align-self: start; }
 .side-stack { display: contents; }
@@ -251,4 +252,30 @@ button, select { font: inherit; }
   .insight-body { display: block; }
   .ai-summary { margin-top: 13px; }
   .factor-row { grid-template-columns: minmax(115px, 1fr) minmax(64px, .7fr) 38px; }
+}
+
+@media (max-width: 480px) {
+  .app-shell { padding-inline: 10px; }
+  .control-field { min-width: 0; }
+  .control-select,
+  .control-select.small { min-width: 0; width: 100%; }
+  .metric-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .metric-card { min-width: 0; min-height: 108px; align-items: start; gap: 9px; padding: 12px 10px; }
+  .metric-icon { width: 31px; height: 31px; border-radius: 9px; }
+  .metric-card > div { min-width: 0; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 1px; }
+  .metric-card span { font-size: 12px; }
+  .metric-card strong { grid-row: auto; grid-column: auto; font-size: 22px; }
+  .metric-card small { overflow: hidden; font-size: 10px; line-height: 1.35; }
+
+  .mobile-view-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin-bottom: 10px; padding: 4px; border: 1px solid #1d3b49; border-radius: 12px; background: #091b25; }
+  .mobile-view-tabs button { min-width: 0; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 7px 4px; border: 0; border-radius: 8px; color: #829ba6; background: transparent; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .mobile-view-tabs button.active { color: #06211e; background: #43dfca; box-shadow: 0 6px 18px #2fe0c326; }
+  .mobile-view-tabs button:focus-visible { outline: 2px solid #8ff5e7; outline-offset: 2px; }
+
+  .workspace[data-mobile-view='map'] .action-panel,
+  .workspace[data-mobile-view='map'] .insight-panel,
+  .workspace[data-mobile-view='actions'] .map-shell,
+  .workspace[data-mobile-view='actions'] .insight-panel,
+  .workspace[data-mobile-view='insight'] .map-shell,
+  .workspace[data-mobile-view='insight'] .action-panel { display: none; }
 }

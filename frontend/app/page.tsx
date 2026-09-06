@@ -32,6 +32,7 @@ const API_BASE_URL = (
 ).replace(/\/+$/, '');
 
 type PolicyId = 'balanced' | 'strict';
+type MobileView = 'map' | 'actions' | 'insight';
 
 type Scenario = {
   id: string;
@@ -293,7 +294,7 @@ function RiskMap({
   const selected = prediction.candidates.find((station) => station.station_id === selectedStationId);
 
   return (
-    <div className="map-shell" aria-label={`${prediction.district}缺車風險站點與巡補順序示意圖`}>
+    <div id="mobile-map-panel" className="map-shell" aria-label={`${prediction.district}缺車風險站點與巡補順序示意圖`}>
       <div className="map-meta">
         <div>
           <span className="eyebrow">區域風險圖</span>
@@ -412,7 +413,7 @@ function RiskMap({
         <span><i className="legend-dot unknown" />資料不足</span>
         {reveal && <span><i className="legend-dot still-empty" />仍缺車</span>}
         {reveal && <span><i className="legend-dot recovered" />已恢復</span>}
-        <span className="route-note"><Route size={14} />風險優先、鄰近串接；非實際派車指令</span>
+        <span className="route-note"><Route size={14} />#1最高風險，其後鄰近串接；非實際派車指令</span>
       </div>
     </div>
   );
@@ -437,7 +438,7 @@ function StationInsight({
   const isBedrock = explanation?.operational_summary.provider === 'amazon_bedrock';
 
   return (
-    <section className="insight-panel" aria-label="站點風險解釋與營運摘要">
+    <section id="mobile-insight-panel" className="insight-panel" aria-label="站點風險解釋與營運摘要">
       <div className="insight-heading">
         <div><span className="eyebrow">站點風險解釋</span><h2>{station?.station_name ?? '選擇一個站點'}</h2></div>
         {station?.risk_probability !== null && station && (
@@ -516,6 +517,7 @@ export default function Home() {
   const [explainLoading, setExplainLoading] = useState(false);
   const [explainError, setExplainError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mobileView, setMobileView] = useState<MobileView>('map');
   const selectedStationIdRef = useRef<number | null>(null);
 
   const selectStation = useCallback((stationId: number | null) => {
@@ -541,6 +543,7 @@ export default function Home() {
     setReveal(null);
     setExplanation(null);
     setExplainError(null);
+    setMobileView('map');
     selectStation(null);
     setScenarioId(requestedScenarioId);
     setPolicy(requestedPolicy);
@@ -757,6 +760,7 @@ export default function Home() {
                 setScenarioId(value);
                 setPrediction(null);
                 setReveal(null);
+                setMobileView('map');
               }}
               disabled={!options || loading}
             >
@@ -779,6 +783,7 @@ export default function Home() {
                 setPolicy(value as PolicyId);
                 setPrediction(null);
                 setReveal(null);
+                setMobileView('map');
               }}
               disabled={!options || loading}
             >
@@ -854,16 +859,50 @@ export default function Home() {
       </section>
 
       {prediction ? (
-        <section className="workspace">
-          <RiskMap
-            prediction={prediction}
-            reveal={reveal}
-            selectedStationId={selectedStationId}
-            onSelectStation={selectStation}
-          />
+        <>
+          <div className="mobile-view-tabs" role="tablist" aria-label="手機版資訊切換">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mobileView === 'map'}
+              aria-controls="mobile-map-panel"
+              className={mobileView === 'map' ? 'active' : ''}
+              onClick={() => setMobileView('map')}
+            >
+              <MapPinned size={15} />地圖
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mobileView === 'actions'}
+              aria-controls="mobile-actions-panel"
+              className={mobileView === 'actions' ? 'active' : ''}
+              onClick={() => setMobileView('actions')}
+            >
+              <Route size={15} />行動清單
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mobileView === 'insight'}
+              aria-controls="mobile-insight-panel"
+              className={mobileView === 'insight' ? 'active' : ''}
+              onClick={() => setMobileView('insight')}
+            >
+              <Sparkles size={15} />模型解釋
+            </button>
+          </div>
 
-          <div className="side-stack">
-            <aside className="action-panel">
+          <section className="workspace" data-mobile-view={mobileView}>
+            <RiskMap
+              prediction={prediction}
+              reveal={reveal}
+              selectedStationId={selectedStationId}
+              onSelectStation={selectStation}
+            />
+
+            <div className="side-stack">
+              <aside id="mobile-actions-panel" className="action-panel">
               <div className="panel-heading">
                 <div><span className="eyebrow">行動清單</span><h2>優先巡補順序</h2></div>
                 <span className="count-badge">{prediction.summary.action_count} 站</span>
@@ -875,7 +914,10 @@ export default function Home() {
                     <button
                       className={`station-row ${selectedStationId === station.station_id ? 'active' : ''}`}
                       key={station.station_id}
-                      onClick={() => selectStation(station.station_id)}
+                      onClick={() => {
+                        selectStation(station.station_id);
+                        setMobileView('insight');
+                      }}
                     >
                       <span className="route-number">{station.route_order}</span>
                       <span className="station-copy">
@@ -913,16 +955,17 @@ export default function Home() {
                 </Button>
                 <span>每站各算一次，不採整段事件灌水</span>
               </div>
-            </aside>
+              </aside>
 
-            <StationInsight
-              station={selectedStation}
-              explanation={explanation}
-              loading={explainLoading}
-              error={explainError}
-            />
-          </div>
-        </section>
+              <StationInsight
+                station={selectedStation}
+                explanation={explanation}
+                loading={explainLoading}
+                error={explainError}
+              />
+            </div>
+          </section>
+        </>
       ) : (
         <section className="workspace-placeholder">
           {loading ? <LoaderCircle size={30} className="spin" /> : <MapPinned size={30} />}
