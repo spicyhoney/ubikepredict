@@ -1,0 +1,20 @@
+asset,path_or_location,rows_or_size,tracked_on_github,contains_future_truth,required_for_demo,purpose,reason_if_not_tracked
+主辦方1至6月原始快照,本機A_交通局-資料集,13324945,false,true,false,完整EDA與重新訓練,授權與檔案大小
+1至4月開發資料,主辦方原始快照子集,8787329,false,true,false,早期EDA與第一版開發,由原始資料衍生
+5月資料,主辦方原始快照子集,2297154,false,true,false,時間外回顧與實驗比較,由原始資料衍生
+6月原始資料,主辦方原始快照子集,2240462,false,true,false,最終時間外核對來源,由原始資料衍生
+站點維度表,data/stations/dim_station.csv,1586 station identities,true,false,true,名稱行政區座標與容量,
+六月缺車完整feature cache,data/source/dynamic_red_empty_2026_06.parquet,92882 candidate snapshots,true,true,true,離線稽核與凍結特徵來源,
+六月缺車truth-free輸入,data/source/dynamic_red_empty_2026_06_input.parquet,92882 candidate snapshots,true,false,true,API與Lambda安全推論輸入,
+六月缺車凍結決策表,data/reference/june_all_eligible_decisions.parquet,27962 eligible decisions,true,true,true,30分鐘後揭曉與parity測試,
+六月滿柱完整feature cache,data/source/dynamic_red_full_2026_06.parquet,9960 candidate snapshots,true,true,true,滿柱離線稽核,
+六月滿柱truth-free輸入,data/source/dynamic_red_full_2026_06_input.parquet,9960 candidate snapshots,true,false,true,滿柱API安全推論輸入,
+六月滿柱凍結決策表,data/reference/june_full_dock_all_eligible_decisions.parquet,3776 eligible decisions,true,true,true,滿柱揭曉與parity測試,
+缺車LightGBM,model/lgbm_full.txt,242 trees and 68 features,true,false,true,凍結模型推論,
+滿柱LightGBM,model/lgbm_full_dock.txt,114 trees and 68 features,true,false,true,滿柱輔助推論,
+缺車校正與門檻,config/final_policy_freeze_before_may.json,Platt plus feature order plus thresholds,true,false,true,重現相同風險與決策,
+滿柱校正與門檻,config/final_policy_freeze_full_dock_before_may.json,Platt plus feature order plus thresholds,true,false,true,重現滿柱風險與決策,
+舊分析報告,analysis/reports/01至10,10 workbooks,true,mixed,false,保留探索到目標轉換的證據,
+完整實驗證據包,analysis/reports/11_complete_experiments_and_data.xlsx,5 sheets,true,false,false,現場簡報與實驗查核,
+實驗搬運CSV,analysis/data,3 csv files,true,false,false,現場匯入Excel PowerPoint或Power BI,
+AWS與本機密鑰,.env and AWS credentials,secret,false,false,false,部署身分驗證,安全禁止提交

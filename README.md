@@ -26,7 +26,7 @@ API 契約見 [docs/api-contract.md](docs/api-contract.md)，一分鐘展示流�
 
 ## 從資料分析走到最終問題
 
-專案不是先選模型再找用途，而是先分析失衡時段、事件持續時間、重要站定義與既有介入痕跡，再逐步測試逐快照風險、門檻、Top-K 與加權標籤。完整的 10 份 Excel 證據與各階段決策整理在 [分析歷程](analysis/README.md)。這些工作簿保留探索過程；目前實作與最終數字仍以本頁及 [模型卡](docs/model-card.md) 為準。
+專案不是先選模型再找用途，而是先分析失衡時段、事件持續時間、重要站定義與既有介入痕跡，再逐步測試逐快照風險、門檻、Top-K、加權標籤、多時點、存活模型、共識與動態重評估。完整實驗與採用／不採用理由請看 [完整實驗總表與資料證據](EXPERIMENTS_AND_DATA_SUMMARY.md)，11 份 Excel 證據與各階段決策整理在 [分析歷程](analysis/README.md)。這些工作簿保留探索過程；目前實作與最終數字仍以本頁及 [模型卡](docs/model-card.md) 為準。
 
 ## 第一次使用（Windows PowerShell）
 

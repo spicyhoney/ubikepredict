@@ -115,8 +115,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 9443,
-      "sha256": "fd068a0f1e1ce1aa3367f9c8ce2927175a5dd397339f3ff754de287b59edaa43",
+      "bytes": 9603,
+      "sha256": "91cb9e670955f54ffb10d7e71abe5200d263e49fec8120616d4e82b2fb90c801",
       "purpose": "Traditional Chinese setup, testing, CLI, data-boundary and AWS handoff guide."
     },
     {

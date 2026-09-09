@@ -16,6 +16,9 @@
 | 8 | [正式模型與行動政策](reports/08_formal_model_and_action_policy.xlsx) | LightGBM、XGBoost、跨月驗證、校正與門檻的正式比較結果為何？ | 凍結六月開封前的模型選擇與評估規則。 |
 | 9 | [六月最終測試](reports/09_june_final_test.xlsx) | 完全未參與訓練與調參的六月資料表現如何？ | 提供一次性時間外測試，避免用六月反覆挑模型。 |
 | 10 | [加權與標籤實驗](reports/10_weighting_and_label_experiments.xlsx) | 困難負例加權及不同標籤能否修正低 Precision？ | 說明單純調權重不足以解決目標定義問題，促使專案轉向「已缺車後是否持續」。 |
+| 11 | [完整實驗與資料證據](reports/11_complete_experiments_and_data.xlsx) | 從 baseline 到最終動態模型，所有主要實驗、資料與 K10 比較如何串起來？ | 提供現場改簡報可直接搬用的總表、數字與圖表。 |
+
+完整的文字版研究歷程、採用／不採用原因及資料公開邊界，請看 [完整實驗總表與資料證據](../EXPERIMENTS_AND_DATA_SUMMARY.md)。可直接匯入 Excel、PowerPoint 或 Power BI 的數字位於 [`analysis/data/`](data/)。
 
 ## 最終方向如何形成
 
