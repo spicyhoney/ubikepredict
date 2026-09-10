@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="680" viewBox="0 0 720 680">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="360.0" y="34" text-anchor="middle" font-family="Arial" font-size="22" font-weight="700">June reliability diagram</text>
+<line x1="90" y1="590.00" x2="675" y2="590.00" stroke="#e2e8f0"/>
+<line x1="90.00" y1="70" x2="90.00" y2="590" stroke="#f1f5f9"/>
+<text x="78" y="595.00" text-anchor="end" font-family="Arial" font-size="13">0.0</text>
+<text x="90.00" y="617" text-anchor="middle" font-family="Arial" font-size="13">0.0</text>
+<line x1="90" y1="486.00" x2="675" y2="486.00" stroke="#e2e8f0"/>
+<line x1="207.00" y1="70" x2="207.00" y2="590" stroke="#f1f5f9"/>
+<text x="78" y="491.00" text-anchor="end" font-family="Arial" font-size="13">0.2</text>
+<text x="207.00" y="617" text-anchor="middle" font-family="Arial" font-size="13">0.2</text>
+<line x1="90" y1="382.00" x2="675" y2="382.00" stroke="#e2e8f0"/>
+<line x1="324.00" y1="70" x2="324.00" y2="590" stroke="#f1f5f9"/>
+<text x="78" y="387.00" text-anchor="end" font-family="Arial" font-size="13">0.4</text>
+<text x="324.00" y="617" text-anchor="middle" font-family="Arial" font-size="13">0.4</text>
+<line x1="90" y1="278.00" x2="675" y2="278.00" stroke="#e2e8f0"/>
+<line x1="441.00" y1="70" x2="441.00" y2="590" stroke="#f1f5f9"/>
+<text x="78" y="283.00" text-anchor="end" font-family="Arial" font-size="13">0.6</text>
+<text x="441.00" y="617" text-anchor="middle" font-family="Arial" font-size="13">0.6</text>
+<line x1="90" y1="174.00" x2="675" y2="174.00" stroke="#e2e8f0"/>
+<line x1="558.00" y1="70" x2="558.00" y2="590" stroke="#f1f5f9"/>
+<text x="78" y="179.00" text-anchor="end" font-family="Arial" font-size="13">0.8</text>
+<text x="558.00" y="617" text-anchor="middle" font-family="Arial" font-size="13">0.8</text>
+<line x1="90" y1="70.00" x2="675" y2="70.00" stroke="#e2e8f0"/>
+<line x1="675.00" y1="70" x2="675.00" y2="590" stroke="#f1f5f9"/>
+<text x="78" y="75.00" text-anchor="end" font-family="Arial" font-size="13">1.0</text>
+<text x="675.00" y="617" text-anchor="middle" font-family="Arial" font-size="13">1.0</text>
+<line x1="90" y1="590.0" x2="675" y2="70.0" stroke="#94a3b8" stroke-width="2" stroke-dasharray="7 6"/>
+<polyline points="142.13,522.90 186.19,501.21 242.26,442.38 296.08,402.17 351.54,344.86 407.98,280.79 463.88,246.29 519.82,211.23 569.52,218.57" fill="none" stroke="#dc2626" stroke-width="3"/>
+<circle cx="142.13" cy="522.90" r="3.43" fill="#dc2626" fill-opacity="0.78"/>
+<circle cx="186.19" cy="501.21" r="5.46" fill="#dc2626" fill-opacity="0.78"/>
+<circle cx="242.26" cy="442.38" r="8.14" fill="#dc2626" fill-opacity="0.78"/>
+<circle cx="296.08" cy="402.17" r="10.04" fill="#dc2626" fill-opacity="0.78"/>
+<circle cx="351.54" cy="344.86" r="10.04" fill="#dc2626" fill-opacity="0.78"/>
+<circle cx="407.98" cy="280.79" r="7.99" fill="#dc2626" fill-opacity="0.78"/>
+<circle cx="463.88" cy="246.29" r="5.70" fill="#dc2626" fill-opacity="0.78"/>
+<circle cx="519.82" cy="211.23" r="4.20" fill="#dc2626" fill-opacity="0.78"/>
+<circle cx="569.52" cy="218.57" r="3.20" fill="#dc2626" fill-opacity="0.78"/>
+<polyline points="139.34,525.00 183.80,499.47 241.33,440.63 296.22,406.48 352.74,354.74 408.18,307.03 463.51,246.25 521.41,213.25 569.53,218.57" fill="none" stroke="#2563eb" stroke-width="3"/>
+<circle cx="139.34" cy="525.00" r="3.58" fill="#2563eb" fill-opacity="0.78"/>
+<circle cx="183.80" cy="499.47" r="5.60" fill="#2563eb" fill-opacity="0.78"/>
+<circle cx="241.33" cy="440.63" r="7.98" fill="#2563eb" fill-opacity="0.78"/>
+<circle cx="296.22" cy="406.48" r="9.57" fill="#2563eb" fill-opacity="0.78"/>
+<circle cx="352.74" cy="354.74" r="9.81" fill="#2563eb" fill-opacity="0.78"/>
+<circle cx="408.18" cy="307.03" r="8.35" fill="#2563eb" fill-opacity="0.78"/>
+<circle cx="463.51" cy="246.25" r="6.46" fill="#2563eb" fill-opacity="0.78"/>
+<circle cx="521.41" cy="213.25" r="4.77" fill="#2563eb" fill-opacity="0.78"/>
+<circle cx="569.53" cy="218.57" r="3.58" fill="#2563eb" fill-opacity="0.78"/>
+<line x1="90" y1="70" x2="90" y2="590" stroke="#334155" stroke-width="1.5"/>
+<line x1="90" y1="590" x2="675" y2="590" stroke="#334155" stroke-width="1.5"/>
+<text x="382.5" y="656" text-anchor="middle" font-family="Arial" font-size="15">Mean predicted probability</text>
+<text transform="translate(24 330.0) rotate(-90)" text-anchor="middle" font-family="Arial" font-size="15">Observed persistence rate</text>
+<line x1="110" y1="94" x2="140" y2="94" stroke="#2563eb" stroke-width="3"/><text x="150" y="99" font-family="Arial" font-size="13">Calibrated</text>
+<line x1="110" y1="119" x2="140" y2="119" stroke="#dc2626" stroke-width="3"/><text x="150" y="124" font-family="Arial" font-size="13">Uncalibrated</text>
+</svg>
