@@ -45,7 +45,7 @@ API Gateway HTTP API
 1. Clone Repository，讀完交接文件。
 2. 安裝 Git、64-bit Python 3.12、Node.js 22.13 以上、AWS CLI v2、AWS SAM CLI 與 Docker Desktop（Linux container mode）。
 3. 用 IAM Identity Center／SSO 或主辦方提供的短期憑證；不可把 Access Key 寫入 Git、`.env` 或網頁。
-4. 選定 Region，並確認所選 Bedrock model 或 inference profile 在該帳號／Region 可用。
+4. 依主辦 2026-07-22 規範優先使用 `us-east-1`（備選 `us-west-2`），並確認所選 Bedrock model 或 inference profile 在該帳號／Region 可用；若現場公告更新，以最新公告為準。
 5. 先在本機執行全套測試：
 
 ~~~powershell
@@ -69,7 +69,7 @@ aws sts get-caller-identity
 `-DryRun` 會核對必要檔案、參數與 SAM 模板，不呼叫 AWS 建立資源：
 
 ~~~powershell
-.\scripts\deploy-aws.ps1 -Region "ap-northeast-1" -DryRun
+.\scripts\deploy-aws.ps1 -Region "us-east-1" -DryRun
 ~~~
 
 ## 正式部署（有 AWS 憑證後）
@@ -84,7 +84,7 @@ $BedrockResourceArns = @(
 
 .\scripts\deploy-aws.ps1 `
   -StackName "ubikepredict-demo" `
-  -Region "ap-northeast-1" `
+  -Region "us-east-1" `
   -Profile "你的-aws-profile" `
   -EnableBedrock `
   -BedrockModelId "現場可用的-model-或-profile-id" `
@@ -116,7 +116,7 @@ $BedrockResourceArns = @(
 # 使用 LocalBaseUrl 前，另一個 PowerShell 視窗必須先執行 .\scripts\start-local-app.ps1
 .\scripts\verify-cloud.ps1 `
   -StackName "ubikepredict-demo" `
-  -Region "ap-northeast-1" `
+  -Region "us-east-1" `
   -Profile "你的-aws-profile" `
   -Origin "https://main.AMPLIFY_DOMAIN" `
   -LocalBaseUrl "http://127.0.0.1:8000"
@@ -125,10 +125,10 @@ $BedrockResourceArns = @(
 .\scripts\verify-cloud.ps1 -BaseUrl "https://API_URL/prod" -Origin "https://main.AMPLIFY_DOMAIN" -RequireBedrock
 
 # 先只預覽將清理的 stack/buckets，不會刪除
-.\scripts\cleanup-aws.ps1 -StackName "ubikepredict-demo" -Region "ap-northeast-1" -Profile "你的-aws-profile"
+.\scripts\cleanup-aws.ps1 -StackName "ubikepredict-demo" -Region "us-east-1" -Profile "你的-aws-profile"
 
 # 確認後才刪除這個 stack 擁有的版本化 bucket 內容與資源
-.\scripts\cleanup-aws.ps1 -StackName "ubikepredict-demo" -Region "ap-northeast-1" -Profile "你的-aws-profile" -Execute -DeleteBucketContents
+.\scripts\cleanup-aws.ps1 -StackName "ubikepredict-demo" -Region "us-east-1" -Profile "你的-aws-profile" -Execute -DeleteBucketContents
 ~~~
 
 `package-frontend.ps1` 在 Windows 會明確呼叫 `vinext.CMD`，並只對 Vinext 已完成靜態匯出後的已知 Windows shutdown assertion 作受限容錯；其他建置錯誤仍會停止。產物必須含 `frontend/dist/client/index.html`，而且不可含 `localhost:8000`。
@@ -184,7 +184,7 @@ POST /api/reveal
 
 `GET /api/options` 使用 query parameter `mode=empty|full_dock`；`predict`、`explain`與 `reveal` 的 JSON body 使用同名 `mode`。省略時一律預設 `empty`，確保舊版缺車 Demo 仍相容。兩種模式共用同一組 API Gateway 路由，不另建第二套端點。
 
-POST 必須使用 `Content-Type: application/json`（可帶 charset），JSON body 不得超過 64KB。API Gateway 的預設 throttle 為 3 requests/second、burst 10；較慢的 `POST /api/explain` 另設 1 request/second、burst 2。數值是 CloudFormation 參數，現場若要改必須有理由並重新驗收。
+POST 必須使用 `Content-Type: application/json`（可帶 charset），JSON body 不得超過 64KB。API Gateway 的預設 throttle 為 3 requests/second、burst 10；會呼叫 Bedrock 的 `POST /api/explain` 則強制限制為 1 request/second、burst 1，以符合主辦 2026-07-22 規範。這兩個 Bedrock 路由限流參數的上下限均固定為 1，不應在現場放寬。
 
 CORS 只允許實際 Amplify HTTPS origin、開發用 `http://localhost:3000`，以及可選的精確 HTTPS override。前端不得持有 AWS credentials，不直接讀 S3，也不直接呼叫 Bedrock。
 

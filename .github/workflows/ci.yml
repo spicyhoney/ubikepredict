@@ -74,7 +74,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: aws-actions/setup-sam@v2
       - name: Validate SAM and CloudFormation
-        run: sam validate --template-file infra/template.yaml --lint --region ap-northeast-1
+        run: sam validate --template-file infra/template.yaml --lint --region us-east-1
 
   container:
     name: Lambda Linux container build

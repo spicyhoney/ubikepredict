@@ -3,7 +3,7 @@ param(
     [ValidatePattern("^[A-Za-z][A-Za-z0-9-]{0,63}$")]
     [string]$StackName = "ubikepredict-demo",
     [ValidatePattern("^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$")]
-    [string]$Region = "ap-northeast-1",
+    [string]$Region = "us-east-1",
     [string]$Profile = "",
     [switch]$Execute,
     [switch]$DeleteBucketContents

@@ -84,12 +84,12 @@ Parameters:
     Type: Number
     Default: 1
     MinValue: 1
-    MaxValue: 10
+    MaxValue: 1
   ExplainThrottleBurstLimit:
     Type: Number
-    Default: 2
+    Default: 1
     MinValue: 1
-    MaxValue: 20
+    MaxValue: 1
 
 Rules:
   BedrockParametersRequiredWhenEnabled:

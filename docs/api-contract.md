@@ -121,7 +121,7 @@ SHAP 由伺服器對同一筆 LightGBM 輸入計算。Bedrock 僅從 allow-liste
 ## AWS throttle 與 CORS
 
 - 全體 API 預設限速：3 requests/second，burst 10。
-- `POST /api/explain` 額外限速：1 request/second，burst 2，避免連續點站觸發過多 Bedrock 呼叫。
+- `POST /api/explain` 額外限速：1 request/second，burst 1，符合主辦 2026-07-22 規範的 Bedrock 每秒最多 1 次要求。
 - CORS 允許真實 Amplify HTTPS origin、本機 `http://localhost:3000`，及可選的精確 HTTPS origin override。
 - 瀏覽器只呼叫 API Gateway，不直接讀 S3 或 Bedrock。
 

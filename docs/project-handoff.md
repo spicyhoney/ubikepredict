@@ -128,7 +128,7 @@ Top-K 是營運清單上限，不是模型評分方式。先過機率門檻，�
 ## 尚未完成：只剩真實 AWS 憑證才能做的事
 
 - 尚未取得比賽短期 AWS 憑證。
-- 尚未確定實際 Region、該帳號可用的 Bedrock model／inference profile ID，以及 profile 與目的模型所需的精確 ARN 清單。
+- 依主辦 2026-07-22 規範已將部署預設 Region 凍結為 `us-east-1`（`us-west-2` 為備選）；尚待比賽帳號確認可用的 Bedrock model／inference profile ID，以及 profile 與目的模型所需的精確 ARN 清單。
 - 尚未執行 `scripts/deploy-aws.ps1` 建立真實 AWS 資源、上傳資產及 Amplify manual static 前端。
 - 尚未在真實帳號驗收 Bedrock、Prediction role 無 truth 權限、CORS、公開 HTTPS Demo 與 cloud/local parity。
 

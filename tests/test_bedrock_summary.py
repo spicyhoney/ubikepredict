@@ -104,7 +104,7 @@ class BedrockSummaryTest(unittest.TestCase):
             BedrockConfig(
                 enabled=True,
                 model_id="test.model-v1",
-                region="ap-northeast-1",
+                region="us-east-1",
                 timeout_seconds=2.5,
             ),
             client=client,
