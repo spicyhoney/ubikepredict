@@ -118,6 +118,54 @@ def _git_commit() -> str:
     return head
 
 
+def _git_dirty_state() -> dict[str, Any]:
+    result = subprocess.run(
+        [
+            "git",
+            "-c",
+            f"safe.directory={ROOT.as_posix()}",
+            "-C",
+            str(ROOT),
+            "status",
+            "--porcelain=v1",
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if result.returncode != 0:
+        return {"available": False, "dirty": None, "entries": [], "error": result.stderr.strip()}
+    entries = [line for line in result.stdout.splitlines() if line.strip()]
+    return {"available": True, "dirty": bool(entries), "entries": entries, "error": ""}
+
+
+def _resolved_path(value: Path) -> Path:
+    path = value if value.is_absolute() else ROOT / value
+    return path.resolve()
+
+
+def _artifact_records(output_dir: Path) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for path in sorted(output_dir.rglob("*")):
+        if not path.is_file() or path.name == "run_manifest.json":
+            continue
+        records.append(
+            {
+                "path": path.relative_to(output_dir).as_posix(),
+                "bytes": path.stat().st_size,
+                "sha256": _sha256(path),
+                "delivery": (
+                    "regenerate_from_recorded_command"
+                    if path.suffix.lower() == ".parquet" and path.stat().st_size >= 10_000_000
+                    else "eligible_for_repository_delivery"
+                ),
+            }
+        )
+    return records
+
+
 def _duration_bin(values: pd.Series) -> pd.Series:
     numeric = pd.to_numeric(values, errors="raise")
     result = np.select(
@@ -966,17 +1014,32 @@ def run(args: argparse.Namespace) -> Path:
         print(stamped, flush=True)
         log_lines.append(stamped)
 
-    input_path = ROOT / "data/source/dynamic_red_empty_2026_06_input.parquet"
-    reference_path = ROOT / "data/reference/june_all_eligible_decisions.parquet"
-    model_path = ROOT / "model/lgbm_full.txt"
-    freeze_path = ROOT / "config/final_policy_freeze_before_may.json"
-    protocol_path = ROOT / "config/protocol_frozen_before_june.json"
-    station_path = ROOT / "data/stations/dim_station.csv"
-    spec_path = ROOT.parent / "YOUBIKE_EVALUATION.md"
+    input_path = _resolved_path(args.input_path)
+    reference_path = _resolved_path(args.reference_path)
+    model_path = _resolved_path(args.model_path)
+    freeze_path = _resolved_path(args.freeze_path)
+    protocol_path = _resolved_path(args.protocol_path)
+    station_path = _resolved_path(args.stations_path)
+    spec_path = _resolved_path(args.spec_path)
+    required_paths = [
+        input_path,
+        reference_path,
+        model_path,
+        freeze_path,
+        protocol_path,
+        station_path,
+        spec_path,
+    ]
+    missing_paths = [str(path) for path in required_paths if not path.is_file()]
+    if missing_paths:
+        raise FileNotFoundError(f"Required evaluation inputs are missing: {missing_paths}")
     tracked_inputs = [input_path, reference_path, model_path, freeze_path, protocol_path, station_path]
-    if spec_path.is_file():
-        tracked_inputs.append(spec_path)
-    code_paths = [Path(__file__).resolve(), ROOT / "tests/test_evaluation.py"]
+    tracked_inputs.append(spec_path)
+    code_paths = [
+        Path(__file__).resolve(),
+        ROOT / "tests/test_evaluation.py",
+        ROOT / "backend/inference.py",
+    ]
     command_argv = [str(Path(sys.executable)), *sys.argv]
 
     manifest: dict[str, Any] = {
@@ -987,12 +1050,14 @@ def run(args: argparse.Namespace) -> Path:
         "tasks": {"EVAL-2": "running", "EVAL-3": "pending", "EVAL-4": "pending"},
         "git": {
             "commit": _git_commit(),
+            "state": _git_dirty_state(),
             "worktree_note": args.worktree_note,
         },
         "argv": command_argv,
         "command": subprocess.list2cmdline(command_argv),
         "parameters": {
             "task_spec_version": "2026-09-10",
+            "task_spec_path": str(spec_path),
             "K": list(K_VALUES),
             "random_seeds": list(range(args.random_seeds)),
             "random_generator": "numpy.random.Generator(PCG64(seed))",
@@ -1091,7 +1156,31 @@ def run(args: argparse.Namespace) -> Path:
         ).all():
             raise RuntimeError("Eligible population must be currently exact-zero with open docks")
 
-        engine = FrozenYouBikeModel(mode="empty")
+        engine = FrozenYouBikeModel(
+            model_path=model_path,
+            freeze_path=freeze_path,
+            protocol_path=protocol_path,
+            stations_path=station_path,
+            mode="empty",
+        )
+        resolved_engine_paths = {
+            "model_path": str(engine.model_path.resolve()),
+            "freeze_path": str(engine.freeze_path.resolve()),
+            "protocol_path": str(engine.protocol_path.resolve()),
+            "stations_path": str(engine.stations_path.resolve()),
+        }
+        expected_engine_paths = {
+            "model_path": str(model_path),
+            "freeze_path": str(freeze_path),
+            "protocol_path": str(protocol_path),
+            "stations_path": str(station_path),
+        }
+        if resolved_engine_paths != expected_engine_paths:
+            raise RuntimeError(
+                "Frozen model resolved different assets than the manifest inputs: "
+                f"{resolved_engine_paths} != {expected_engine_paths}"
+            )
+        manifest["resolved_engine_paths"] = resolved_engine_paths
         log("Running frozen F0 inference before joining June labels")
         predicted = engine.predict_frame(eligible, attach_stations=False)
         reference = pd.read_parquet(reference_path).rename(
@@ -1749,16 +1838,25 @@ def run(args: argparse.Namespace) -> Path:
             "Verification:\n\n"
             "```powershell\n"
             ".venv\\Scripts\\python.exe -m unittest tests.test_evaluation -v\n"
-            ".venv\\Scripts\\python.exe scripts\\run_evaluation.py --run-id <new-run-id>\n"
+            ".venv\\Scripts\\python.exe scripts\\run_evaluation.py --run-id <new-run-id> "
+            "--spec-path docs\\YOUBIKE_EVALUATION_NEXT_v2.md\n"
             "```\n",
             encoding="utf-8",
         )
         (output_dir / "missing_inputs.md").write_text(
-            "# Inputs missing for EVAL-1\n\n"
-            "EVAL-1 was not requested in this run and cannot yet be reproduced fairly. "
-            "The repository does not contain the original 1–3 month training features/labels, "
-            "April calibration/gate splits, feature builder/trainer, or original stopping logic. "
-            "Stored no-station scores are evaluation evidence only and cannot replace a new A5 fit.\n",
+            "# Missing inputs\n\n"
+            "R2-0 and EVAL-2 through EVAL-4 have all required inputs. Jan-March training "
+            "features/labels and the recovered no-station model are delivered separately for "
+            "R2-1/R2-2. R2-4 remains unavailable because there is no confirmed unseen "
+            "post-June period.\n",
+            encoding="utf-8",
+        )
+        (output_dir / "ARTIFACTS.md").write_text(
+            "# Artifact delivery\n\n"
+            "Small reports, CSV files, figures, commands, logs and manifests may be committed. "
+            "Row-level parquet files are reproducible from the recorded command and exact input "
+            "hashes; large derivatives may remain outside Git when repository size is a concern. "
+            "The manifest records every artifact's byte size and SHA256.\n",
             encoding="utf-8",
         )
 
@@ -1779,11 +1877,7 @@ def run(args: argparse.Namespace) -> Path:
                     "f0_parity_max_abs_diff": parity_diff,
                 },
                 "features": {"f0_count": len(engine.features), "f0_ordered": engine.features},
-                "artifacts": sorted(
-                    str(path.relative_to(output_dir)).replace("\\", "/")
-                    for path in output_dir.rglob("*")
-                    if path.is_file() and path.name != "run_manifest.json"
-                ),
+                "artifacts": _artifact_records(output_dir),
                 "limitations": [
                     "June was previously examined; results are retrospective/exploratory.",
                     "Stored no-station/history scores are not fresh local inference.",
@@ -1829,6 +1923,35 @@ def _parse_args() -> argparse.Namespace:
         type=Path,
         default=ROOT / "outputs/evaluation",
         help="Parent directory for evaluation runs.",
+    )
+    parser.add_argument(
+        "--input-path",
+        type=Path,
+        default=Path("data/source/dynamic_red_empty_2026_06_input.parquet"),
+    )
+    parser.add_argument(
+        "--reference-path",
+        type=Path,
+        default=Path("data/reference/june_all_eligible_decisions.parquet"),
+    )
+    parser.add_argument("--model-path", type=Path, default=Path("model/lgbm_full.txt"))
+    parser.add_argument(
+        "--freeze-path",
+        type=Path,
+        default=Path("config/final_policy_freeze_before_may.json"),
+    )
+    parser.add_argument(
+        "--protocol-path",
+        type=Path,
+        default=Path("config/protocol_frozen_before_june.json"),
+    )
+    parser.add_argument(
+        "--stations-path", type=Path, default=Path("data/stations/dim_station.csv")
+    )
+    parser.add_argument(
+        "--spec-path",
+        type=Path,
+        default=Path("docs/YOUBIKE_EVALUATION_NEXT_v2.md"),
     )
     parser.add_argument("--random-seeds", type=int, default=100)
     parser.add_argument("--bootstrap-repetitions", type=int, default=2000)

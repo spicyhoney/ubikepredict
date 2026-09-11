@@ -1,0 +1,24 @@
+{
+  "new_A0_model_sha256": "d2e8ce0738caa0544531d4ac880bab8c1983fbf52686683631cb65475b5d5cf8",
+  "frozen_F0_model_sha256": "d2e8ce0738caa0544531d4ac880bab8c1983fbf52686683631cb65475b5d5cf8",
+  "model_files_bit_identical": true,
+  "raw_margin_max_absolute_difference": 1.1782229547563361e-07,
+  "top_k_differences": [
+    {
+      "K": 3,
+      "different_keys": 0
+    },
+    {
+      "K": 5,
+      "different_keys": 0
+    },
+    {
+      "K": 10,
+      "different_keys": 0
+    },
+    {
+      "K": 20,
+      "different_keys": 0
+    }
+  ]
+}

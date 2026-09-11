@@ -21,6 +21,7 @@ API 契約見 [docs/api-contract.md](docs/api-contract.md)，一分鐘展示流�
 - [專案完整交接](docs/project-handoff.md)：預測問題、資料切分、68項凍結特徵、模型資產、已做實驗、六月結果、不可更動原則及新對話提示。
 - [AWS 現場交接](docs/aws-handoff.md)：S3、Lambda、API Gateway、IAM、SHAP、Bedrock、前端接法及逐項驗收清單。
 - [模型卡](docs/model-card.md)：凍結模型、Platt公式、門檻與限制。
+- [下一輪 Evaluation 結果](docs/EVALUATION_RESULTS_REVIEW_v2.md)：R2-0～R2-3 的來源補件、特徵消融、no-station 重現與長事件混合政策；R2-4 因沒有真正未見月份而未執行。
 
 新對話不得只看前端畫面猜測專案狀態；必須先讀上述文件並執行 smoke test。本專案現場只搬移已凍結模型做推論，不重新訓練，也不得用六月重新調參。
 

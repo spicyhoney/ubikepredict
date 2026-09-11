@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import importlib.util
 import math
+import os
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 import pandas as pd
@@ -129,6 +131,26 @@ class EvaluationHelpersTest(unittest.TestCase):
         duration_top10 = duration_ranked.loc[duration_ranked["_rank"].le(10)]
         self.assertEqual((len(model_top10), int(model_top10["y_same_30"].sum())), (4_152, 2_574))
         self.assertEqual((len(duration_top10), int(duration_top10["y_same_30"].sum())), (4_152, 2_327))
+
+    def test_explicit_model_assets_override_environment_paths(self) -> None:
+        explicit = {
+            "model_path": ROOT / "model/lgbm_full.txt",
+            "freeze_path": ROOT / "config/final_policy_freeze_before_may.json",
+            "protocol_path": ROOT / "config/protocol_frozen_before_june.json",
+            "stations_path": ROOT / "data/stations/dim_station.csv",
+        }
+        environment = {
+            "UBIKE_MODEL_PATH": "does-not-exist/model.txt",
+            "UBIKE_FREEZE_PATH": "does-not-exist/freeze.json",
+            "UBIKE_PROTOCOL_PATH": "does-not-exist/protocol.json",
+            "UBIKE_STATIONS_PATH": "does-not-exist/stations.csv",
+        }
+        with mock.patch.dict(os.environ, environment, clear=False):
+            engine = evaluation.FrozenYouBikeModel(mode="empty", **explicit)
+        self.assertEqual(engine.model_path.resolve(), explicit["model_path"].resolve())
+        self.assertEqual(engine.freeze_path.resolve(), explicit["freeze_path"].resolve())
+        self.assertEqual(engine.protocol_path.resolve(), explicit["protocol_path"].resolve())
+        self.assertEqual(engine.stations_path.resolve(), explicit["stations_path"].resolve())
 
 
 if __name__ == "__main__":

@@ -1,0 +1,12 @@
+[2026-09-11T11:52:21+08:00] Training provenance passed: 225,086 known-duration rows and 99,802 positives
+[2026-09-11T11:52:21+08:00] R2-1 A0: rolling CV with 68 features
+[2026-09-11T11:52:41+08:00] R2-1 A1: rolling CV with 65 features
+[2026-09-11T11:53:00+08:00] R2-1 A2: rolling CV with 30 features
+[2026-09-11T11:53:14+08:00] R2-1 A3: rolling CV with 60 features
+[2026-09-11T11:53:29+08:00] R2-1 A4: rolling CV with 67 features
+[2026-09-11T11:54:01+08:00] R2-1 A5: rolling CV with 65 features
+[2026-09-11T11:54:29+08:00] R2-1 complete; A0/F0 max raw difference=1.18e-07
+[2026-09-11T11:54:29+08:00] R2-2: reproducing the recovered no-station model
+[2026-09-11T11:54:29+08:00] R2-2 complete; max calibrated probability difference=9.32e-08
+[2026-09-11T11:54:29+08:00] R2-3: evaluating LONG_FIRST_F0 and list exchanges
+[2026-09-11T11:54:32+08:00] R2-1, R2-2, and R2-3 completed

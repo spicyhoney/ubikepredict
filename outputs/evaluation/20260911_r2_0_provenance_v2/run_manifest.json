@@ -1,0 +1,476 @@
+{
+  "run_id": "20260911_r2_0_provenance_v2",
+  "started_at": "2026-09-11T11:43:29+08:00",
+  "finished_at": "2026-09-11T11:43:48+08:00",
+  "status": "complete",
+  "tasks": {
+    "EVAL-2": "complete",
+    "EVAL-3": "complete",
+    "EVAL-4": "complete"
+  },
+  "git": {
+    "commit": "21e5ea52a7759ca2365975140e9b4800d1b8dd4b",
+    "state": {
+      "available": true,
+      "dirty": true,
+      "entries": [
+        " M scripts/run_evaluation.py",
+        " M tests/test_evaluation.py",
+        "?? data/training/",
+        "?? docs/YOUBIKE_EVALUATION_NEXT_v2.md",
+        "?? model/lgbm_no_station.txt",
+        "?? scripts/run_evaluation_next.py",
+        "?? tests/test_evaluation_next.py"
+      ],
+      "error": ""
+    },
+    "worktree_note": "R2-0 through R2-3 implementation in progress; intended tracked changes present"
+  },
+  "argv": [
+    "C:\\Users\\a5140\\OneDrive\\桌面\\hack2\\.venv_youbike\\Scripts\\python.exe",
+    "scripts\\run_evaluation.py",
+    "--run-id",
+    "20260911_r2_0_provenance_v2",
+    "--spec-path",
+    "docs\\YOUBIKE_EVALUATION_NEXT_v2.md",
+    "--worktree-note",
+    "R2-0 through R2-3 implementation in progress; intended tracked changes present"
+  ],
+  "command": "C:\\Users\\a5140\\OneDrive\\桌面\\hack2\\.venv_youbike\\Scripts\\python.exe scripts\\run_evaluation.py --run-id 20260911_r2_0_provenance_v2 --spec-path docs\\YOUBIKE_EVALUATION_NEXT_v2.md --worktree-note \"R2-0 through R2-3 implementation in progress; intended tracked changes present\"",
+  "parameters": {
+    "task_spec_version": "2026-09-10",
+    "task_spec_path": "C:\\Users\\a5140\\OneDrive\\桌面\\hack2\\github\\ubikepredict\\docs\\YOUBIKE_EVALUATION_NEXT_v2.md",
+    "K": [
+      3,
+      5,
+      10,
+      20
+    ],
+    "random_seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      57,
+      58,
+      59,
+      60,
+      61,
+      62,
+      63,
+      64,
+      65,
+      66,
+      67,
+      68,
+      69,
+      70,
+      71,
+      72,
+      73,
+      74,
+      75,
+      76,
+      77,
+      78,
+      79,
+      80,
+      81,
+      82,
+      83,
+      84,
+      85,
+      86,
+      87,
+      88,
+      89,
+      90,
+      91,
+      92,
+      93,
+      94,
+      95,
+      96,
+      97,
+      98,
+      99
+    ],
+    "random_generator": "numpy.random.Generator(PCG64(seed))",
+    "duration_bins": {
+      "B0": "0",
+      "B1": "1-2",
+      "B2": "3-5",
+      "B3": ">=6"
+    },
+    "duration_fixed_tie_break": "station_id ascending",
+    "bootstrap_repetitions": 2000,
+    "bootstrap_seeds": {
+      "eval2_p_at_10": 20260910,
+      "eval4_loss": 20260911,
+      "eval3_exact_duration_auc": 20260912
+    },
+    "calibration_bins": "10 equal-width plus 10 equal-count sensitivity bins",
+    "label": "same station remains exact-zero at t+30 minutes",
+    "population": "decision_is_peak=1; duration_unknown=0; episode start and decision in June; target before July; current available_bikes=0 and available_docks>0",
+    "methods": {
+      "F0": "runtime p_lgbm_full descending, station_id ascending ties",
+      "DURATION": "red_duration_steps descending, station_id ascending ties",
+      "DURATION_TIE_RANDOM": "red_duration_steps descending, shared PCG64 priority ascending, station_id ascending final ties",
+      "RANDOM": "shared PCG64 priority ascending, station_id ascending final ties",
+      "STORED_NO_STATION": "stored p_lgbm_no_station descending",
+      "STORED_HISTORY": "stored p_history descending"
+    }
+  },
+  "software": {
+    "python": "3.12.14",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.5.2",
+    "pandas": "3.0.5",
+    "pyarrow": "25.0.1",
+    "lightgbm": "4.7.0"
+  },
+  "inputs": {
+    "ubikepredict\\data\\source\\dynamic_red_empty_2026_06_input.parquet": {
+      "bytes": 2861200,
+      "sha256": "b1cb8fdffb1832b0d588bd5d821625cc92f8806d190b15dd5648e36f267af009"
+    },
+    "ubikepredict\\data\\reference\\june_all_eligible_decisions.parquet": {
+      "bytes": 500714,
+      "sha256": "5f725b36965e41026679772dd60d79734e939b7a17025b6623f8385727660385"
+    },
+    "ubikepredict\\model\\lgbm_full.txt": {
+      "bytes": 1237897,
+      "sha256": "d2e8ce0738caa0544531d4ac880bab8c1983fbf52686683631cb65475b5d5cf8"
+    },
+    "ubikepredict\\config\\final_policy_freeze_before_may.json": {
+      "bytes": 9282,
+      "sha256": "fef97defc8935a499831f12f1f42dd9d153b1075b61c50f3b57219c0bbccc714"
+    },
+    "ubikepredict\\config\\protocol_frozen_before_june.json": {
+      "bytes": 27099,
+      "sha256": "a65243c5ff986f57b0fb53f26a7649ccbc130a74765890788fe6196640c9825b"
+    },
+    "ubikepredict\\data\\stations\\dim_station.csv": {
+      "bytes": 193983,
+      "sha256": "2ea9d705da0d3508fd7e89009398b8b272188937c1e5f7209d0748cb1998d81f"
+    },
+    "ubikepredict\\docs\\YOUBIKE_EVALUATION_NEXT_v2.md": {
+      "bytes": 21851,
+      "sha256": "77492c3473a8d4063cb0152d16f7af8554911eb6264bbe5431e1d182794fd8b6"
+    }
+  },
+  "code": {
+    "scripts/run_evaluation.py": {
+      "bytes": 85174,
+      "sha256": "69797f13b62e0244af139fe17e3e92c2826c9e0714a5052a81981966494cb747"
+    },
+    "tests/test_evaluation.py": {
+      "bytes": 6475,
+      "sha256": "64c7ad651f9ed1f68c9229e4cbef3bd573803e01be3d7cd7219e88d0d8592feb"
+    },
+    "backend/inference.py": {
+      "bytes": 13119,
+      "sha256": "af14543f280e1d6c9d11d60ef584ce0f6e3dcd3c6255ced6dd8c221984ab2249"
+    }
+  },
+  "resolved_engine_paths": {
+    "model_path": "C:\\Users\\a5140\\OneDrive\\桌面\\hack2\\github\\ubikepredict\\model\\lgbm_full.txt",
+    "freeze_path": "C:\\Users\\a5140\\OneDrive\\桌面\\hack2\\github\\ubikepredict\\config\\final_policy_freeze_before_may.json",
+    "protocol_path": "C:\\Users\\a5140\\OneDrive\\桌面\\hack2\\github\\ubikepredict\\config\\protocol_frozen_before_june.json",
+    "stations_path": "C:\\Users\\a5140\\OneDrive\\桌面\\hack2\\github\\ubikepredict\\data\\stations\\dim_station.csv"
+  },
+  "f0_parity": {
+    "max_absolute_probability_difference": 0.0,
+    "bit_exact": true,
+    "downstream_top_k": [
+      {
+        "K": 3,
+        "different_selected_keys": 0,
+        "runtime_TP": 870,
+        "stored_TP": 870
+      },
+      {
+        "K": 5,
+        "different_selected_keys": 0,
+        "runtime_TP": 1404,
+        "stored_TP": 1404
+      },
+      {
+        "K": 10,
+        "different_selected_keys": 0,
+        "runtime_TP": 2574,
+        "stored_TP": 2574
+      },
+      {
+        "K": 20,
+        "different_selected_keys": 0,
+        "runtime_TP": 4488,
+        "stored_TP": 4488
+      }
+    ]
+  },
+  "counts": {
+    "source_rows": 92882,
+    "peak_rows": 33465,
+    "peak_unknown_duration_excluded": 5503,
+    "eligible_rows": 27962,
+    "positive_rows": 11921,
+    "decision_times": 420,
+    "calendar_days": 30,
+    "f0_parity_max_abs_diff": 0.0
+  },
+  "features": {
+    "f0_count": 68,
+    "f0_ordered": [
+      "available_bikes",
+      "available_docks",
+      "capacity",
+      "unavailable_count",
+      "bike_ratio",
+      "dock_ratio",
+      "unavailable_ratio",
+      "bikes_lag_30",
+      "bikes_lag_60",
+      "bikes_lag_90",
+      "docks_lag_30",
+      "docks_lag_60",
+      "docks_lag_90",
+      "bike_ratio_lag_30",
+      "bike_ratio_lag_60",
+      "bike_ratio_lag_90",
+      "dock_ratio_lag_30",
+      "dock_ratio_lag_60",
+      "dock_ratio_lag_90",
+      "delta_bikes_30",
+      "delta_bikes_60",
+      "delta_bikes_90",
+      "delta_docks_30",
+      "delta_docks_60",
+      "delta_docks_90",
+      "abs_delta_bikes_30",
+      "delta_bikes_ratio_30",
+      "delta_docks_ratio_30",
+      "bike_acceleration_30",
+      "dock_acceleration_30",
+      "bike_ratio_mean_90",
+      "bike_ratio_min_90",
+      "bike_ratio_max_90",
+      "dock_ratio_mean_90",
+      "dock_ratio_min_90",
+      "dock_ratio_max_90",
+      "bike_ratio_lag_1d",
+      "dock_ratio_lag_1d",
+      "bike_ratio_lag_7d",
+      "dock_ratio_lag_7d",
+      "target_hour_sin",
+      "target_hour_cos",
+      "target_weekday_sin",
+      "target_weekday_cos",
+      "target_is_weekend",
+      "target_is_peak",
+      "lag_90_missing",
+      "lag_1d_missing",
+      "lag_7d_missing",
+      "suspected_large_jump_past",
+      "station_id",
+      "district_code",
+      "target_hour",
+      "target_weekday",
+      "longitude",
+      "latitude",
+      "same_red_lag_30",
+      "same_red_lag_60",
+      "same_red_lag_90",
+      "same_red_lag_1d",
+      "same_red_lag_7d",
+      "opposite_red_lag_30",
+      "opposite_red_lag_60",
+      "opposite_red_lag_90",
+      "same_red_count_past_90",
+      "red_duration_capped_6",
+      "red_duration_log1p_capped",
+      "duration_90plus"
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "ARTIFACTS.md",
+      "bytes": 333,
+      "sha256": "874c526859c18a42f8ea79b1417dc49c79dfec568ce7daa379b675794cce566d",
+      "delivery": "eligible_for_repository_delivery"
+    },
+    {
+      "path": "calibration_bins.csv",
+      "bytes": 5750,
+      "sha256": "23aa21fe41cb70d1fb2a8a3398d294f71d5018eef8c8bed0a6d0664c5ae5f656",
+      "delivery": "eligible_for_repository_delivery"
+    },
+    {
+      "path": "commands.md",
+      "bytes": 535,
+      "sha256": "4e8ecd8b7a173232d6aace1a499ba2de30111a97ffc6d231f88ec8c49184f666",
+      "delivery": "eligible_for_repository_delivery"
+    },
+    {
+      "path": "eval2_bootstrap.csv",
+      "bytes": 140,
+      "sha256": "885ebe7ed1f752d5062d3076367b93eeaa6f0925b28c7a83f2b1c33f041b700d",
+      "delivery": "eligible_for_repository_delivery"
+    },
+    {
+      "path": "eval2_summary.csv",
+      "bytes": 3867,
+      "sha256": "23f59795bf95d4a5ab9734dd177aa2f052a832686ee81bc0e5e14b6cc8fb4811",
+      "delivery": "eligible_for_repository_delivery"
+    },
+    {
+      "path": "eval3_exact_duration.csv",
+      "bytes": 483,
+      "sha256": "5e6e541235f00cd9ab72b64158cff1c39b29b44a2a2142c3e28ec7e74018e567",
+      "delivery": "eligible_for_repository_delivery"
+    },
+    {
+      "path": "eval3_table_a.csv",
+      "bytes": 2580,
+      "sha256": "401a6cbd35a5e4eebbfef7df665dbf1a227ece84a49e3ae6f781617528505a1b",
+      "delivery": "eligible_for_repository_delivery"
+    },
+    {
+      "path": "eval3_table_b.csv",
+      "bytes": 2338,
+      "sha256": "fb4171d59a570dbd67e800d31a5bd1d9d7ed15eb4ef9ba56b25867104232c6bb",
+      "delivery": "eligible_for_repository_delivery"
+    },
+    {
+      "path": "eval4_scores.csv",
+      "bytes": 539,
+      "sha256": "33b6da51e2d57ccee193558ef7af5a69bb4b1ffa7a9eacc6b471fed56b6a529c",
+      "delivery": "eligible_for_repository_delivery"
+    },
+    {
+      "path": "figures/eval2_precision_at_k.svg",
+      "bytes": 4592,
+      "sha256": "cf2183698d2fdd7fe2aafe20ea1be2a30b09bda8f96f545ab9cf0737d83103fe",
+      "delivery": "eligible_for_repository_delivery"
+    },
+    {
+      "path": "figures/eval2_recall_at_k.svg",
+      "bytes": 4589,
+      "sha256": "8f2f3ade6cae84c529adc8ec28b38d0950fb52b6c00ecaa7451a7bb0ddba6d25",
+      "delivery": "eligible_for_repository_delivery"
+    },
+    {
+      "path": "figures/eval3_duration_precision.svg",
+      "bytes": 3263,
+      "sha256": "d994e42e881dc423dd430e876da30deef9d6c02e55edf5eb0c6f59331882c882",
+      "delivery": "eligible_for_repository_delivery"
+    },
+    {
+      "path": "figures/eval4_reliability.svg",
+      "bytes": 4800,
+      "sha256": "12cb789942d0958363f4d66e05fe6dbfb054eee0d0046bb15e1e0a72682bb657",
+      "delivery": "eligible_for_repository_delivery"
+    },
+    {
+      "path": "logs/run.log",
+      "bytes": 686,
+      "sha256": "1ac1db317c80d9cf809ab3e16cfe14f2f86ce8e1b004744a20c2a76b609ef904",
+      "delivery": "eligible_for_repository_delivery"
+    },
+    {
+      "path": "metrics.csv",
+      "bytes": 379566,
+      "sha256": "ffeadeea49a9799ca6f8d64c88523c1991089ef6f1dfe9c067f20c19b4b857b8",
+      "delivery": "eligible_for_repository_delivery"
+    },
+    {
+      "path": "missing_inputs.md",
+      "bytes": 268,
+      "sha256": "0e915bd0873c269c6c2760e2e3ba3dd7547655977022ce0bca4e37949069dfe4",
+      "delivery": "eligible_for_repository_delivery"
+    },
+    {
+      "path": "predictions.parquet",
+      "bytes": 1494029,
+      "sha256": "ba8977bf04a64d4b5c3932862726b383aae711a391f0bda125672decf889413c",
+      "delivery": "eligible_for_repository_delivery"
+    },
+    {
+      "path": "random_priorities.parquet",
+      "bytes": 42589577,
+      "sha256": "51e9b6bf53766f2049caabeb4272ec8162ead0f59a6613b6f0f9017b8f3c1a6a",
+      "delivery": "regenerate_from_recorded_command"
+    },
+    {
+      "path": "REPORT.md",
+      "bytes": 9952,
+      "sha256": "1d9f3db3347b375274a968cd1d830b4d563e84d5398982bcc837ce108ca3f34d",
+      "delivery": "eligible_for_repository_delivery"
+    },
+    {
+      "path": "selections.parquet",
+      "bytes": 106827079,
+      "sha256": "03d8480edb20cd642d5bf98b92f55430db68da797e9da1fc9eb7fd0b6099240d",
+      "delivery": "regenerate_from_recorded_command"
+    }
+  ],
+  "limitations": [
+    "June was previously examined; results are retrospective/exploratory.",
+    "Stored no-station/history scores are not fresh local inference.",
+    "Daily bootstrap does not eliminate cross-day episode dependence.",
+    "Exact-zero persistence is not a causal intervention outcome."
+  ]
+}

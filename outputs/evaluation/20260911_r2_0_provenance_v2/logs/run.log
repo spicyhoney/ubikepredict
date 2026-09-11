@@ -1,0 +1,8 @@
+[2026-09-11T11:43:29+08:00] Loading truth-free source and applying frozen June eligibility rule
+[2026-09-11T11:43:29+08:00] Running frozen F0 inference before joining June labels
+[2026-09-11T11:43:29+08:00] F0 parity passed: 27,962 rows, max probability difference 0
+[2026-09-11T11:43:29+08:00] Running 100 shared-priority random and duration-tie sensitivity seeds
+[2026-09-11T11:43:46+08:00] EVAL-2 random baselines and tie sensitivity complete
+[2026-09-11T11:43:46+08:00] Running EVAL-3 global-list and within-duration diagnostics
+[2026-09-11T11:43:47+08:00] Running EVAL-4 calibration diagnostics
+[2026-09-11T11:43:48+08:00] EVAL-2, EVAL-3, and EVAL-4 completed successfully
