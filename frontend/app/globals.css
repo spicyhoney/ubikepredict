@@ -310,3 +310,164 @@ button, select { font: inherit; }
   .workspace[data-mobile-view='insight'] .map-shell,
   .workspace[data-mobile-view='insight'] .action-panel { display: none; }
 }
+
+/* Geographic map: preserve original tile colors and visible provider attribution. */
+.road-map-stage { position: relative; isolation: isolate; }
+.road-map-canvas { height: 445px; width: 100%; background: #dce5e8; color: #172e37; font-family: inherit; z-index: 0; }
+.road-map-canvas .leaflet-control-attribution { font-size: 10px; background: #ffffffed; color: #263e49; }
+.road-map-canvas .leaflet-control-attribution a { color: #006381; }
+.road-map-canvas .leaflet-tooltip { color: #172e37; }
+.road-marker { background: none; border: 0; }
+.road-station { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 2px solid #fff; border-radius: 50%; font: 800 12px/1 system-ui; color: #062d2a; background: #4de0c5; box-shadow: 0 1px 5px #102b3977; cursor: pointer; }
+.road-station.persistent { background: #fa597b; color: #fff; }
+.road-station.recovered { background: #43c899; }
+.road-station.alert { background: #ffbd5c; }
+.road-station.below { background: #849cd1; }
+.road-station.unknown { background: #83949c; cursor: default; }
+.road-station:not(.action):not(.persistent):not(.recovered) { width: 18px; height: 18px; margin: 6px; }
+.road-station.selected { outline: 3px solid #093c50; outline-offset: 2px; }
+.road-station.simulated { box-shadow: 0 0 0 5px #55b4ffb8; }
+.road-station:focus-visible { outline: 3px solid #053b9f; outline-offset: 3px; }
+.road-fit-button { position: absolute; top: 12px; right: 12px; z-index: 500; border: 1px solid #bbc9ce; border-radius: 7px; padding: 8px 10px; color: #123746; background: #fff; font-size: 12px; cursor: pointer; box-shadow: 0 2px 8px #102b3933; }
+.road-map-message, .road-tile-warning { position: absolute; left: 12px; bottom: 32px; z-index: 500; background: #fff; color: #234250; padding: 10px 12px; border-radius: 7px; max-width: calc(100% - 24px); font-size: 12px; }
+.road-route-summary { display: grid; gap: 5px; padding: 12px 16px; border-bottom: 1px solid #1c3947; color: #a8c5d1; font-size: 12px; }
+.road-route-summary strong { color: #65e8d4; font-size: 14px; }
+.road-route-summary small { line-height: 1.55; color: #8ba8b4; }
+.road-route-summary a { color: #91c9df; text-decoration: underline; justify-self: start; }
+.road-route-summary summary { cursor: pointer; color: #b5d6e2; }
+.road-route-summary ol { margin: 8px 0 0; padding-left: 20px; line-height: 1.8; }
+.road-route-summary button { justify-self: start; padding: 6px 12px; border-radius: 6px; border: 1px solid #4c879a; cursor: pointer; }
+.road-selection { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 10px 16px 0; font-size: 12px; }
+.road-selection span { color: #9ebbc8; }
+@media (max-width: 700px) { .road-map-canvas { height: 370px; } .road-route-summary { padding: 10px 12px; } }
+
+.road-route-summary .road-time-warning { color: #ffc374; }
+
+/* Fixed-time supply alternatives share the geographic map. */
+.supply-panel { padding: 18px; border-top: 1px solid #dce7eb; background: #faf8fc; color: #304956; }
+.supply-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+.supply-heading h3 { margin: 5px 0 10px; font-size:18px; }
+.supply-panel p { font-size:13px; line-height:1.65; margin:10px 0; }
+.supply-panel small { display:block; font-size:11px; line-height:1.6; color:#62717e; }
+.supply-policy { display:flex; align-items:center; gap:10px; font-size:13px; flex-wrap:wrap; }
+.supply-policy select { background:white; padding:8px; border:1px solid #ad99bb; border-radius:8px; max-width:100%; }
+.supply-heading label { font-size:12px; }
+.supply-cards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; margin:14px 0; }
+.supply-card { display:flex; flex-direction:column; text-align:left; align-items:flex-start; gap:7px; min-width:0; border:1px solid #d9cde2; border-radius:12px; background:white; padding:12px; color:#304956; cursor:pointer; }
+.supply-card.active { border:2px solid #8538af; padding:11px; background:#f5ecfa; }
+.supply-card strong { font-size:13px; overflow-wrap:anywhere; }
+.supply-card b,.supply-card span { font-size:12px; }
+.supply-letter,.road-supplier { background:#8538af; color:white; font-weight:800; border-radius:8px; padding:4px 9px; }
+.road-supplier { width:32px; height:32px; padding:0; border:2px solid white; box-shadow:0 2px 6px #30495680; cursor:pointer; }
+.road-supplier.selected { outline:3px solid #d6a9f0; }
+.supply-route-status { color:#733393; font-weight:600; }
+.supply-panel button:focus-visible,.road-supplier:focus-visible { outline:3px solid #027c99; outline-offset:2px; }
+@media (max-width: 600px) { .supply-cards { grid-template-columns:1fr; } .supply-panel { padding:14px; } }
+
+.supply-panel { background:#10212b; color:#c7dae3; border-color:#294050; }
+.supply-panel small { color:#90a9b8; }
+.supply-policy select { background:#162f3d; color:#d6e8ef; border-color:#725c8c; }
+.supply-card { background:#132c39; color:#d4e4ed; border-color:#526079; }
+.supply-card.active { background:#302840; border-color:#c68ce8; }
+.supply-route-status { color:#d7acf0; }
+
+
+/* Sequential dispatch demo: confirmed stock reservations and elapsed route time. */
+.dispatch-route-overview { padding: 20px; border-bottom: 1px solid #254858; background: #102c36; }
+.dispatch-route-overview h3 { margin: 6px 0; font-size: 17px; }
+.dispatch-route-chain { line-height: 1.9; overflow-wrap: anywhere; color: #a9cbd6; }
+.dispatch-route-chain strong { color: #55dacb; }
+.dispatch-totals { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; }
+.dispatch-totals strong { color: #57dfcf; font-size: 20px; }
+.dispatch-totals span, .dispatch-route-overview small { font-size: 12px; color: #98b8c9; }
+.dispatch-route-overview small { display: block; margin-top: 10px; }
+.dispatch-plan-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 14px 0; }
+.dispatch-plan-controls button, .dispatch-continue, .dispatch-replan { border: 1px solid #365d72; background: #163744; color: #cce2ed; border-radius: 8px; padding: 9px 12px; cursor: pointer; }
+.dispatch-plan-controls button:disabled { opacity: .45; cursor: default; }
+.dispatch-plan-controls .dispatch-start, .dispatch-plan-controls .dispatch-confirm { background: #36caba; color: #07353a; border-color: #36caba; font-weight: 700; }
+.dispatch-plan-controls label { font-size: 12px; color: #acc6d6; }
+.dispatch-budget-note { border-left: 3px solid #ffc16a; padding: 8px 12px; background: #ffc16a0e; color: #ffd091; font-size: 13px; }
+.dispatch-plan-settings { display: flex; flex-wrap: wrap; gap: 12px; margin: 12px 0; }
+.dispatch-plan-settings label { font-size: 13px; }
+.dispatch-plan-settings select, .dispatch-plan-settings input { border: 1px solid #365d72; border-radius: 7px; padding: 7px; color: #d6e7ed; background: #183444; max-width: 100%; }
+.dispatch-plan-settings input { width: 66px; }
+.dispatch-step-list { list-style: none; padding: 0; margin: 18px 0; border: 1px solid #2a4958; border-radius: 10px; max-height: 290px; overflow: auto; }
+.dispatch-step-list li { display: flex; align-items: center; border-bottom: 1px solid #284453; padding: 4px 8px; }
+.dispatch-step-list li:last-child { border: 0; }
+.dispatch-step-list li.active { background: #173e49; box-shadow: inset 3px 0 #3cd2bf; }
+.dispatch-step-view { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 0; padding: 9px 6px; border: 0; background: none; text-align: left; color: #c8e1e8; cursor: pointer; }
+.dispatch-step-view strong { font-size: 13px; }
+.dispatch-step-view span { font-size: 12px; color: #8caabf; }
+.dispatch-step-list li.processed .dispatch-step-view span { color: #6cd2c3; }
+.dispatch-replan { font-size: 11px; padding: 6px; flex-shrink: 0; }
+.dispatch-plan-notice { color: #efce98; font-size: 13px; }
+.dispatch-continue { display: block; margin-top: 10px; }
+.dispatch-origin, .dispatch-plan-finished { color: #a8c9d7; }
+.supply-card span, .supply-card small { overflow-wrap: anywhere; }
+@media (max-width: 640px) { .dispatch-route-overview { padding: 15px; } .dispatch-route-overview .supply-heading { align-items: flex-start; } .dispatch-plan-settings { flex-direction: column; } .dispatch-route-overview .count-badge { white-space: nowrap; } }
+
+
+/* Show conditional improvement separately from historical-data completeness. */
+.improvement-highlight { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 10px; margin-bottom: 12px; border: 1px solid #3cd2bf4d; border-radius: 12px; background: linear-gradient(135deg, #36caba19, #123240); text-align: center; }
+.improvement-highlight .improvement-label { color: #b6dfdc; font-size: 13px; font-weight: 650; letter-spacing: .04em; }
+.simulation-result .improvement-value { color: #51e2cd; font-size: clamp(48px, 5vw, 68px); line-height: 1.1; font-weight: 800; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.improvement-highlight .improvement-count { color: #d6eaf0; font-size: 13px; font-weight: 600; }
+.simulation-result .improvement-highlight small { color: #94b3c2; font-size: 11px; }
+.improvement-data-note { display: block; margin-top: 8px; color: #93adbd; }
+
+/* Independent warning and fleet dispatch pages. */
+.system-nav { display:flex; gap:8px; margin:0 0 20px; }
+.system-nav a { border:1px solid #254653; padding:10px 20px; border-radius:12px; color:#9fbac7; text-decoration:none; font-weight:700; }
+.system-nav a[aria-current=page] { background:#3ed7c0; color:#06242a; border-color:#3ed7c0; }
+.fleet-settings { display:grid; gap:12px; }
+.fleet-settings label { display:flex; align-items:center; justify-content:space-between; gap:12px; color:#b6cfda; font-size:13px; }
+.fleet-settings select,.fleet-settings input { max-width:190px; min-width:90px; color:#d7f7fb; background:#112f3d; border:1px solid #36596a; border-radius:8px; padding:8px; }
+.fleet-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:16px; border-top:1px solid #244754; }
+.fleet-summary,.fleet-note,.fleet-error,.fleet-empty { padding:12px 18px; color:#abc6d1; font-size:13px; line-height:1.7; }
+.fleet-error { color:#ffbe90; }
+.fleet-routes { display:grid; gap:12px; padding:12px 16px; }
+.fleet-route-card { background:#102d39; border:1px solid #31535e; border-radius:12px; padding:14px; min-width:0; }
+.fleet-route-card header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.fleet-route-card ol { padding-left:22px; line-height:1.9; font-size:13px; }
+.fleet-route-card button { color:inherit; }
+.fleet-ledger { margin:12px 16px; padding:14px; background:#102732; border-radius:12px; color:#afc6d1; font-size:13px; line-height:1.8; }
+.fleet-legend { display:flex; gap:12px; flex-wrap:wrap; padding:10px 16px; font-size:12px; }
+.fleet-legend span { display:flex; gap:6px; align-items:center; }
+.fleet-legend i { width:20px; height:4px; display:inline-block; }
+@media(max-width:650px) { .system-nav { margin-top:6px; } .system-nav a { flex:1; text-align:center; } .fleet-route-card header { flex-wrap:wrap; } .fleet-settings select { max-width:165px; } }
+.fleet-toolbar { flex-direction:column; align-items:stretch; }
+.fleet-toolbar p { color:#a9c3ce; font-size:13px; margin:8px 0 0; }
+.fleet-controls { display:flex; gap:8px; flex-wrap:wrap; }
+.fleet-controls button { padding:10px 15px; border:1px solid #3a6170; background:#153b48; border-radius:9px; font-size:13px; color:#d5f5f7; cursor:pointer; }
+.fleet-controls button:nth-child(2):not(:disabled) { background:#36cbb5; color:#062b32; font-weight:800; }
+.fleet-controls button:disabled { opacity:.45; cursor:default; }
+.fleet-route-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:12px; padding:0 16px; }
+.fleet-route-card h3 { font-size:16px; margin-bottom:10px; }
+.fleet-itinerary { color:#e2eef2; line-height:1.65; font-size:13px; overflow-wrap:anywhere; }
+.fleet-route-card li span { display:block; color:#8eafc0; font-size:12px; }
+.fleet-target-button { border:0; background:transparent; text-align:left; cursor:pointer; }
+.fleet-unserved { padding:12px 18px; color:#a7bbc7; font-size:12px; line-height:1.8; }
+.fleet-summary strong,.fleet-summary span { display:block; }
+.app-shell[data-system='dispatch'] .action-panel { height:auto; max-height:none; align-self:start; }
+.app-shell[data-system='dispatch'] .station-list { flex:0 0 auto; height:300px; max-height:300px; }
+.fleet-route-card h3 { filter:brightness(1.7); }
+@media(max-width:650px) { .app-shell[data-system='dispatch'] .station-list { height:250px; max-height:250px; } }
+
+.fleet-visibility { margin:0 16px 14px; padding:12px 14px; border:1px solid #345566; border-radius:12px; min-width:0; }
+.fleet-visibility legend { color:#def6f5; padding:0 6px; font-size:14px; font-weight:700; }
+.fleet-visibility-options,.fleet-visibility-actions { display:flex; flex-wrap:wrap; gap:8px 14px; margin-bottom:10px; }
+.fleet-visibility-options label { display:flex; align-items:center; gap:6px; padding:6px 0; color:#d2e4eb; cursor:pointer; font-size:13px; }
+.fleet-visibility-options input { width:17px; height:17px; accent-color:#39d6bd; }
+.fleet-visibility-options i { display:inline-block; width:20px; height:4px; border-radius:3px; }
+.fleet-visibility-options small { color:#9bb7c3; }
+.fleet-visibility-actions button,.fleet-focus-button { border:1px solid #456b7b; background:#123440; border-radius:7px; color:#d9f5f7; padding:6px 10px; font-size:12px; cursor:pointer; }
+.fleet-visibility output { font-size:12px; line-height:1.6; color:#a8c6d0; display:block; }
+.fleet-focus-button { margin:0 0 10px; }
+.fleet-hidden-note { display:block; margin-bottom:8px; color:#91aab5; }
+
+.fleet-settings .fleet-low-risk-toggle { justify-content:flex-start; line-height:1.5; cursor:pointer; }
+.fleet-settings .fleet-low-risk-toggle input { width:17px; min-width:17px; height:17px; margin:0; padding:0; accent-color:#39d6bd; }
+
+/* Demo clarity: visible planning feedback and direct route focus beside the map. */
+.fleet-toolbar > output { font-size:14px; line-height:1.65; color:#c2dce4; }
+.fleet-visibility-actions button:hover,.fleet-focus-button:hover { border-color:#43d7c1; background:#1c4853; }

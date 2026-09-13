@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import json
 import os
+from typing import Any
 import unittest
 from unittest.mock import patch
+
+from botocore.awsrequest import AWSResponse
+from botocore.exceptions import ConnectTimeoutError, ReadTimeoutError
 
 from backend.bedrock_summary import (
     BedrockConfig,
     BedrockSummaryService,
     SUMMARY_DISCLAIMER,
+    _create_bedrock_client,
     compose_explain_response,
     controlled_prompt_payload,
     template_operational_summary,
@@ -65,6 +70,38 @@ class FakeClient:
         if self.error is not None:
             raise self.error
         return self.response
+
+
+class _StaticRawResponse:
+    def __init__(self, body: bytes) -> None:
+        self.body = body
+
+    def stream(self, amt: int | None = None, decode_content: bool = False) -> Any:
+        del amt, decode_content
+        yield self.body
+
+
+class _FailingTransport:
+    def __init__(self, mode: str) -> None:
+        self.mode = mode
+        self.calls: list[Any] = []
+
+    def send(self, request: Any) -> AWSResponse:
+        self.calls.append(request)
+        if self.mode == "503":
+            return AWSResponse(
+                request.url,
+                503,
+                {
+                    "content-type": "application/json",
+                    "x-amzn-errortype": "ServiceUnavailableException",
+                },
+                _StaticRawResponse(b'{"message":"offline"}'),
+            )
+        error = TimeoutError("offline timeout")
+        if self.mode == "read_timeout":
+            raise ReadTimeoutError(endpoint_url=request.url, error=error)
+        raise ConnectTimeoutError(endpoint_url=request.url, error=error)
 
 
 def converse_response(payload: object) -> dict[str, object]:
@@ -182,6 +219,69 @@ class BedrockSummaryTest(unittest.TestCase):
         self.assertEqual(summary["provider"], "template")
         self.assertEqual(summary["fallback_reason"], "bedrock_error")
 
+    def test_sdk_transport_failures_are_never_retried(self) -> None:
+        environment = {
+            "AWS_ACCESS_KEY_ID": "dummy",
+            "AWS_SECRET_ACCESS_KEY": "dummy",
+            "AWS_SESSION_TOKEN": "dummy",
+            "AWS_EC2_METADATA_DISABLED": "true",
+        }
+        expected_reasons = {
+            "503": "bedrock_error",
+            "read_timeout": "bedrock_timeout",
+            "connect_timeout": "bedrock_timeout",
+        }
+        with patch.dict(os.environ, environment, clear=False):
+            for mode, fallback_reason in expected_reasons.items():
+                with self.subTest(mode=mode):
+                    config = BedrockConfig(
+                        enabled=True,
+                        model_id="test.model-v1",
+                        region="us-east-1",
+                        timeout_seconds=0.2,
+                    )
+                    client = _create_bedrock_client(config)
+                    transport = _FailingTransport(mode)
+                    client._endpoint.http_session = transport  # type: ignore[attr-defined]
+                    summary = BedrockSummaryService(config, client=client).summarize(
+                        STATION_FACTS, SHAP
+                    )
+
+                    self.assertEqual(len(transport.calls), 1)
+                    self.assertEqual(
+                        client.meta.config.retries.get("total_max_attempts"), 1
+                    )
+                    self.assertEqual(summary["provider"], "template")
+                    self.assertEqual(summary["fallback_reason"], fallback_reason)
+
+    def test_lambda_deadline_skips_transport_and_default_window_allows_it(self) -> None:
+        client = FakeClient(response=converse_response(VALID_MODEL_OUTPUT))
+        config = BedrockConfig(
+            enabled=True,
+            model_id="test.model-v1",
+            timeout_seconds=6.0,
+        )
+        service = BedrockSummaryService(config, client=client)
+
+        insufficient = service.summarize(
+            STATION_FACTS,
+            SHAP,
+            remaining_time_seconds=10.0,
+        )
+        self.assertEqual(client.calls, [])
+        self.assertEqual(insufficient["provider"], "template")
+        self.assertEqual(
+            insufficient["fallback_reason"], "insufficient_lambda_time"
+        )
+
+        sufficient = service.summarize(
+            STATION_FACTS,
+            SHAP,
+            remaining_time_seconds=25.0,
+        )
+        self.assertEqual(len(client.calls), 1)
+        self.assertEqual(sufficient["provider"], "amazon_bedrock")
+
     def test_invalid_json_or_schema_always_uses_template_provider(self) -> None:
         invalid_outputs = [
             "not-json",
@@ -230,6 +330,39 @@ class BedrockSummaryTest(unittest.TestCase):
         self.assertEqual(config.region, "us-west-2")
         self.assertEqual(config.timeout_seconds, 2.25)
         self.assertEqual(config.max_tokens, 256)
+
+
+class BedrockPacingTest(unittest.TestCase):
+    def test_fast_success_and_failure_hold_execution_slot(self):
+        for error in (None, TimeoutError("offline")):
+            with self.subTest(error=error):
+                client = FakeClient(response={}, error=error)
+                service = BedrockSummaryService(BedrockConfig(enabled=True, model_id="fake", min_interval_seconds=1.1), client=client)
+                with patch("backend.bedrock_summary.time.monotonic", side_effect=[10.0, 10.1]), patch("backend.bedrock_summary.time.sleep") as sleep:
+                    if error is None:
+                        self.assertEqual(service._paced_converse(client), {})
+                    else:
+                        with self.assertRaises(TimeoutError):
+                            service._paced_converse(client)
+                    self.assertAlmostEqual(sleep.call_args.args[0], 1.0)
+                self.assertEqual(len(client.calls), 1)
+
+    def test_slow_call_needs_no_extra_hold(self):
+        client = FakeClient(response={})
+        service = BedrockSummaryService(BedrockConfig(enabled=True, model_id="fake", min_interval_seconds=1.1), client=client)
+        with patch("backend.bedrock_summary.time.monotonic", side_effect=[10.0, 12.0]), patch("backend.bedrock_summary.time.sleep") as sleep:
+            service._paced_converse(client)
+            sleep.assert_not_called()
+
+    def test_disabled_and_deadline_fallback_never_send_or_sleep(self):
+        for enabled, remaining in ((False, 25), (True, 10)):
+            client = FakeClient(response={})
+            service = BedrockSummaryService(BedrockConfig(enabled=enabled, model_id="fake", timeout_seconds=6, min_interval_seconds=1.1), client=client)
+            with patch("backend.bedrock_summary.time.sleep") as sleep:
+                result = service.summarize(STATION_FACTS, SHAP, remaining_time_seconds=remaining)
+            self.assertEqual(result["provider"], "template")
+            self.assertEqual(client.calls, [])
+            sleep.assert_not_called()
 
 
 if __name__ == "__main__":

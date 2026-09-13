@@ -52,8 +52,18 @@ class FakePredictionService:
     def predict(self, payload: dict[str, object]) -> dict[str, object]:
         return {"prediction": payload}
 
-    def explain(self, payload: dict[str, object]) -> dict[str, object]:
-        return {"explanation": payload}
+    def explain(
+        self,
+        payload: dict[str, object],
+        *,
+        remaining_time_provider: object = None,
+    ) -> dict[str, object]:
+        remaining = (
+            remaining_time_provider()  # type: ignore[operator]
+            if remaining_time_provider is not None
+            else None
+        )
+        return {"explanation": payload, "remaining_time_seconds": remaining}
 
 
 class FakeRevealService:
@@ -66,6 +76,15 @@ class LambdaHandlerTest(unittest.TestCase):
         handler_module._reset_services_for_tests()
 
     def test_prediction_routes_http_api_v2(self) -> None:
+        class FakeLambdaContext:
+            def __init__(self) -> None:
+                self.remaining_time_calls = 0
+
+            def get_remaining_time_in_millis(self) -> int:
+                self.remaining_time_calls += 1
+                return 12_345
+
+        context = FakeLambdaContext()
         handler_module._reset_services_for_tests(
             prediction_factory=FakePredictionService
         )
@@ -82,7 +101,8 @@ class LambdaHandlerTest(unittest.TestCase):
             event("POST", "/api/predict", {"station": 7}), None
         )
         explanation = handler_module.prediction_handler(
-            event("POST", "/api/explain", {"station": 7}, base64_encoded=True), None
+            event("POST", "/api/explain", {"station": 7}, base64_encoded=True),
+            context,
         )
 
         self.assertEqual(health["statusCode"], 200)
@@ -91,6 +111,8 @@ class LambdaHandlerTest(unittest.TestCase):
         self.assertEqual(decoded(options)["mode"], "full_dock")
         self.assertEqual(decoded(prediction)["prediction"], {"station": 7})
         self.assertEqual(decoded(explanation)["explanation"], {"station": 7})
+        self.assertEqual(decoded(explanation)["remaining_time_seconds"], 12.345)
+        self.assertEqual(context.remaining_time_calls, 1)
 
     def test_prediction_handler_cannot_dispatch_truth(self) -> None:
         reveal_created = 0
@@ -109,6 +131,47 @@ class LambdaHandlerTest(unittest.TestCase):
         )
         self.assertEqual(response["statusCode"], 404)
         self.assertEqual(reveal_created, 0)
+
+    def test_named_stage_routes_and_truth_boundary(self) -> None:
+        handler_module._reset_services_for_tests(
+            prediction_factory=FakePredictionService,
+            reveal_factory=FakeRevealService,
+        )
+        for method, path, payload, handler in (
+            ("GET", "/api/health", None, handler_module.prediction_handler),
+            ("GET", "/api/options", None, handler_module.prediction_handler),
+            ("POST", "/api/predict", {"mode": "full_dock"}, handler_module.prediction_handler),
+            ("POST", "/api/explain", {"station_id": 7}, handler_module.prediction_handler),
+            ("POST", "/api/reveal", {"station_ids": [7]}, handler_module.reveal_handler),
+        ):
+            with self.subTest(path=path):
+                request = event(method, "/prod" + path, payload)
+                request["requestContext"]["stage"] = "prod"
+                self.assertEqual(handler(request, None)["statusCode"], 200)
+        reveal_request = event("POST", "/prod/api/reveal", {"station_ids": [7]})
+        reveal_request["requestContext"]["stage"] = "prod"
+        self.assertEqual(
+            handler_module.prediction_handler(reveal_request, None)["statusCode"], 404
+        )
+
+    def test_stage_normalisation_preserves_route_only_and_unrelated_paths(self) -> None:
+        handler_module._reset_services_for_tests(prediction_factory=FakePredictionService)
+        for stage, path, expected_status in (
+            ("$default", "/api/health", 200),
+            ("prod", "/api/health", 200),
+            ("api", "/api/health", 200),
+            ("api", "/api/health/", 200),
+            ("api", "/api/api/health", 200),
+            ("prod", "/production/api/health", 404),
+            ("$default", "/prod/api/health", 404),
+        ):
+            with self.subTest(stage=stage, path=path):
+                request = event("GET", path)
+                request["requestContext"]["stage"] = stage
+                self.assertEqual(
+                    handler_module.prediction_handler(request, None)["statusCode"],
+                    expected_status,
+                )
 
     def test_reveal_handler_never_initialises_prediction_service(self) -> None:
         prediction_created = 0

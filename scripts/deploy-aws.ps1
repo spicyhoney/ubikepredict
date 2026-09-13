@@ -2,9 +2,10 @@
 param(
     [ValidatePattern("^[A-Za-z][A-Za-z0-9-]{0,63}$")]
     [string]$StackName = "ubikepredict-demo",
-    [ValidatePattern("^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$")]
+    [ValidateSet("us-east-1", "us-west-2")]
     [string]$Region = "us-east-1",
     [string]$Profile = "",
+    [string]$ImageRepository = "",
     [ValidatePattern("^[A-Za-z0-9_-]+$")]
     [string]$StageName = "prod",
     [ValidatePattern("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")]
@@ -16,6 +17,7 @@ param(
     [switch]$EnableBedrock,
     [string]$BedrockModelId = "",
     [string[]]$BedrockModelResourceArns = @(),
+    [ValidateSet("", "us-east-1", "us-west-2")]
     [string]$BedrockRegion = "",
     [ValidateRange(1, 15)]
     [int]$BedrockTimeoutSeconds = 6,
@@ -96,13 +98,12 @@ if ($EnableBedrock) {
         throw "EnableBedrock requires at least one exact BedrockModelResourceArn for least-privilege IAM."
     }
     foreach ($ResourceArn in $BedrockModelResourceArns) {
-        if ([string]::IsNullOrWhiteSpace($ResourceArn) -or $ResourceArn -notmatch "^arn:[^:]+:bedrock:") {
-            throw "Every BedrockModelResourceArn must be an exact Bedrock ARN."
+        if ([string]::IsNullOrWhiteSpace($ResourceArn) -or
+            $ResourceArn -notmatch "^arn:aws:bedrock:(us-east-1|us-west-2):" -or
+            $ResourceArn -match '[*?]') {
+            throw "Every BedrockModelResourceArn must be an exact Bedrock ARN in us-east-1 or us-west-2."
         }
     }
-}
-if (-not [string]::IsNullOrWhiteSpace($BedrockRegion) -and $BedrockRegion -notmatch "^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$") {
-    throw "BedrockRegion is not a valid AWS region name."
 }
 if (-not [string]::IsNullOrWhiteSpace($FrontendOriginOverride) -and $FrontendOriginOverride -notmatch "^https://[^/]+$") {
     throw "FrontendOriginOverride must be one exact https origin with no trailing slash."
@@ -124,12 +125,29 @@ $RequiredAssets = @(
     "data\reference\june_all_eligible_decisions.parquet",
     "data\reference\june_full_dock_all_eligible_decisions.parquet"
 )
+$Manifest = Get-Content -Raw -LiteralPath (Join-Path $RepoRoot "MANIFEST.json") | ConvertFrom-Json
+function Assert-FrozenAsset {
+    param([string]$RelativePath)
+    $FullPath = Join-Path $RepoRoot $RelativePath
+    $ManifestPath = $RelativePath.Replace("\", "/")
+    $Entries = @($Manifest.files | Where-Object { $_.path -eq $ManifestPath })
+    if ($Entries.Count -ne 1) {
+        throw "Deployment asset must have exactly one manifest entry: $RelativePath"
+    }
+    $Entry = $Entries[0]
+    if ((Get-Item -LiteralPath $FullPath).Length -ne $Entry.bytes -or
+        (Get-FileHash -LiteralPath $FullPath -Algorithm SHA256).Hash -ne $Entry.sha256) {
+        throw "Frozen deployment asset bytes/SHA256 mismatch: $RelativePath"
+    }
+}
 foreach ($RelativePath in $RequiredAssets) {
     $FullPath = Join-Path $RepoRoot $RelativePath
     if (-not (Test-Path -LiteralPath $FullPath -PathType Leaf)) {
         throw "Required deployment asset is missing: $RelativePath"
     }
+    Assert-FrozenAsset $RelativePath
 }
+Write-Host "Frozen deployment assets verified: $($RequiredAssets.Count)/$($RequiredAssets.Count)."
 
 $ModelKey = "releases/$ReleaseId/model/lgbm_full.txt"
 $FullDockModelKey = "releases/$ReleaseId/model/lgbm_full_dock.txt"
@@ -166,7 +184,7 @@ if (-not [string]::IsNullOrWhiteSpace($BedrockRegion)) {
 }
 
 Write-Host "Validating SAM template..."
-& $Sam validate --template-file $TemplatePath
+& $Sam validate --template-file $TemplatePath --lint --region $Region
 if ($LASTEXITCODE -ne 0) {
     throw "SAM template validation failed."
 }
@@ -203,10 +221,19 @@ $SamDeployArguments = @(
     "--region", $Region,
     "--capabilities", "CAPABILITY_IAM",
     "--resolve-s3",
-    "--resolve-image-repos",
     "--no-confirm-changeset",
     "--no-fail-on-empty-changeset"
 )
+if ([string]::IsNullOrWhiteSpace($ImageRepository)) {
+    $SamDeployArguments += "--resolve-image-repos"
+} else {
+    $ExpectedRegistry = "$($Identity.Account).dkr.ecr.$Region.amazonaws.com/"
+    if (-not $ImageRepository.StartsWith($ExpectedRegistry) -or
+        $ImageRepository.Substring($ExpectedRegistry.Length) -notmatch "^[a-z0-9][a-z0-9._/-]+$") {
+        throw "ImageRepository must be an exact repository in the verified account and region."
+    }
+    $SamDeployArguments += @("--image-repositories", "PredictionFunction=$ImageRepository", "--image-repositories", "RevealFunction=$ImageRepository")
+}
 if (-not [string]::IsNullOrWhiteSpace($Profile)) {
     $SamDeployArguments += @("--profile", $Profile)
 }
@@ -241,6 +268,8 @@ if (-not $SkipAssetUpload) {
         @{ Local = "data\reference\june_all_eligible_decisions.parquet"; Bucket = $TruthBucket; Key = $TruthKey },
         @{ Local = "data\reference\june_full_dock_all_eligible_decisions.parquet"; Bucket = $TruthBucket; Key = $FullDockTruthKey }
     )
+    # Recheck after the potentially long container build, before any upload.
+    foreach ($Upload in $Uploads) { Assert-FrozenAsset $Upload.Local }
     foreach ($Upload in $Uploads) {
         Invoke-AwsCommand @(
             "s3", "cp",

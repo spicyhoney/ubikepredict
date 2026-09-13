@@ -23,6 +23,9 @@ from backend.s3_assets import AssetError, prepare_prediction_assets, prepare_rev
 LOGGER = logging.getLogger(__name__)
 MAX_PAYLOAD_BYTES = 64 * 1024
 DEFAULT_ALLOWED_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000"
+API_ROUTE_PATHS = frozenset(
+    {"/api/health", "/api/options", "/api/predict", "/api/explain", "/api/reveal"}
+)
 
 
 class RequestError(ValueError):
@@ -172,6 +175,13 @@ def _method_and_path(event: Mapping[str, Any]) -> tuple[str, str]:
     http = http if isinstance(http, Mapping) else {}
     method = str(http.get("method") or event.get("httpMethod") or "").upper()
     path = str(event.get("rawPath") or event.get("path") or "/")
+    # HTTP API v2 includes a named execute-api stage in rawPath. Custom
+    # domains and $default stages can already expose the route-only path.
+    stage = str(context.get("stage") or "") if isinstance(context, Mapping) else ""
+    if stage and stage != "$default" and path.rstrip("/") not in API_ROUTE_PATHS:
+        prefix = f"/{stage}"
+        if path == prefix or path.startswith(prefix + "/"):
+            path = path[len(prefix):] or "/"
     if not method:
         raise RequestError(
             "無法判斷HTTP方法",
@@ -285,8 +295,31 @@ def _prediction_health(service: Any) -> dict[str, Any]:
     }
 
 
+RemainingTimeProvider = Callable[[], float | None]
+
+
+def _lambda_remaining_time_provider(context: Any) -> RemainingTimeProvider | None:
+    getter = getattr(context, "get_remaining_time_in_millis", None)
+    if not callable(getter):
+        return None
+
+    def remaining_time_seconds() -> float:
+        try:
+            milliseconds = float(getter())
+        except (TypeError, ValueError, RuntimeError):
+            LOGGER.warning("Lambda remaining-time lookup failed; Bedrock will be skipped")
+            return 0.0
+        seconds = milliseconds / 1000.0
+        return seconds if seconds > 0 else 0.0
+
+    return remaining_time_seconds
+
+
 def _dispatch_prediction(
-    event: Mapping[str, Any], method: str, path: str
+    event: Mapping[str, Any],
+    method: str,
+    path: str,
+    remaining_time_provider: RemainingTimeProvider | None = None,
 ) -> dict[str, Any]:
     if method == "OPTIONS":
         return _empty_response(event, HTTPStatus.NO_CONTENT)
@@ -308,13 +341,24 @@ def _dispatch_prediction(
                 HTTPStatus.NOT_IMPLEMENTED,
                 "EXPLAIN_NOT_CONFIGURED",
             )
-        return _json_response(event, service.explain(payload))
+        if remaining_time_provider is None:
+            explanation = service.explain(payload)
+        else:
+            explanation = service.explain(
+                payload,
+                remaining_time_provider=remaining_time_provider,
+            )
+        return _json_response(event, explanation)
     raise RequestError("找不到此端點", HTTPStatus.NOT_FOUND, "NOT_FOUND")
 
 
 def _dispatch_reveal(
-    event: Mapping[str, Any], method: str, path: str
+    event: Mapping[str, Any],
+    method: str,
+    path: str,
+    remaining_time_provider: RemainingTimeProvider | None = None,
 ) -> dict[str, Any]:
+    del remaining_time_provider
     if method == "OPTIONS":
         return _empty_response(event, HTTPStatus.NO_CONTENT)
     if method == "POST" and path == "/api/reveal":
@@ -326,13 +370,16 @@ def _dispatch_reveal(
 def _handle(
     event: Mapping[str, Any] | None,
     context: Any,
-    dispatcher: Callable[[Mapping[str, Any], str, str], dict[str, Any]],
+    dispatcher: Callable[
+        [Mapping[str, Any], str, str, RemainingTimeProvider | None],
+        dict[str, Any],
+    ],
 ) -> dict[str, Any]:
-    del context  # Request IDs remain available to API Gateway/CloudWatch logs.
+    remaining_time_provider = _lambda_remaining_time_provider(context)
     safe_event: Mapping[str, Any] = event if isinstance(event, Mapping) else {}
     try:
         method, path = _method_and_path(safe_event)
-        return dispatcher(safe_event, method, path)
+        return dispatcher(safe_event, method, path, remaining_time_provider)
     except RequestError as error:
         return _error_response(safe_event, error.status, error.code, str(error))
     except (ValueError, TypeError) as error:

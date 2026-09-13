@@ -1,32 +1,59 @@
-# Python
-.venv/
-__pycache__/
-*.py[cod]
-.pytest_cache/
-
-# Local settings and secrets
+# Credentials and local settings
 .env
 .env.*
 !.env.example
+key.cmd
+**/key.cmd
 *.pem
 *.key
-
-# Frontend/build artifacts (if added later)
+*.p12
+*.pfx
+.aws/
+.azure/
+credentials
+*.tfstate*
+# Private competition data and frozen runtime artifacts
+data/
+model/
+config/
+backend/supply_snapshot.json
+backend/supply_snapshot.sha256
+frontend/public/fleet-road-matrix.json
+A_交通局-資料集*/
+*.parquet
+*.csv
+# Legacy experiments, handoffs, reports, recordings and audit logs
+analysis/
+research/
+outputs/
+work/
+tmp/
+docs/HANDOFF.md
+docs/ASTRA_EXECUTION_AUDIT.md
+docs/EXPERIMENT_PLANNING_LOG.md
+*.log
+*.zip
+*.xlsx
+*.pptx
+*.pdf
+*.mp4
+~$*
+# Dependencies and generated build state
+.venv*/
+__pycache__/
+*.py[cod]
+.pytest_cache/
 node_modules/
 dist/
 build/
-
-# Large raw/research artifacts are intentionally outside this repository
-A_交通局-資料集/
-tmp/
-outputs/
-*.log
 .runtime/
 .aws-sam/
 .aws-artifacts/
-
-# Editors and operating systems
+.wrangler/
+.next/
+*.tsbuildinfo
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
+# .kiro is deliberately included, as required by the organizer.

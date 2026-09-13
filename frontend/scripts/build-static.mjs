@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, copyFileSync } from 'node:fs';
 import path from 'node:path';
 
 const executable = path.join(
@@ -24,8 +24,17 @@ const knownWindowsShutdownAssertion =
   combinedOutput.includes('Build complete.') &&
   combinedOutput.includes('Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)');
 
-if (result.status === 0 && indexExists) process.exit(0);
+function prepareStaticDirectories() {
+  // Amplify can serve /dispatch/ directly and after refresh without an RSC server.
+  const client = path.join(process.cwd(), 'dist', 'client');
+  if (existsSync(path.join(client, 'dispatch.html'))) {
+    mkdirSync(path.join(client, 'dispatch'), { recursive: true });
+    copyFileSync(path.join(client, 'dispatch.html'), path.join(client, 'dispatch', 'index.html'));
+  }
+}
+if (result.status === 0 && indexExists) { prepareStaticDirectories(); process.exit(0); }
 if (knownWindowsShutdownAssertion && indexExists) {
+  prepareStaticDirectories();
   console.warn(
     '[build] Vinext completed the static export. Ignoring its known Windows-only shutdown assertion.',
   );

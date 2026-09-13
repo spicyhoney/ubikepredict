@@ -17,6 +17,30 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+function Invoke-TimedRestMethod {
+    param(
+        [string]$Uri,
+        [string]$Method = "Get",
+        [hashtable]$Headers = @{},
+        [string]$ContentType,
+        [string]$Body,
+        [int]$TimeoutSec = 30
+    )
+    $RequestArgs = @{} + $PSBoundParameters
+    $StartedUtc = [DateTime]::UtcNow
+    $Watch = [Diagnostics.Stopwatch]::StartNew()
+    Write-Host "HTTP start utc=$($StartedUtc.ToString('o')) method=$Method uri=$Uri"
+    try {
+        $Result = Invoke-RestMethod @RequestArgs -ResponseHeadersVariable ResponseHeaders
+        $RequestId = $ResponseHeaders['apigw-requestid']
+        Write-Host "HTTP success elapsed_ms=$($Watch.ElapsedMilliseconds) request_id=$RequestId"
+        return $Result
+    } catch {
+        Write-Host "HTTP failed elapsed_ms=$($Watch.ElapsedMilliseconds)"
+        throw
+    }
+}
+
 function Get-CloudBaseUrl {
     $Aws = Get-Command aws -ErrorAction SilentlyContinue
     if ($null -eq $Aws) {
@@ -66,12 +90,12 @@ if (-not [string]::IsNullOrWhiteSpace($Origin)) {
     $Headers["Origin"] = $Origin.TrimEnd("/")
 }
 
-$Health = Invoke-RestMethod -Method Get -Uri "$BaseUrl/api/health" -Headers $Headers -TimeoutSec 30
+$Health = Invoke-TimedRestMethod -Method Get -Uri "$BaseUrl/api/health" -Headers $Headers -TimeoutSec 30
 if ($Health.status -ne "ok") {
     throw "Health endpoint did not return status=ok."
 }
-$null = Invoke-RestMethod -Method Get -Uri "$BaseUrl/api/options" -Headers $Headers -TimeoutSec 30
-$FullDockOptions = Invoke-RestMethod `
+$null = Invoke-TimedRestMethod -Method Get -Uri "$BaseUrl/api/options" -Headers $Headers -TimeoutSec 30
+$FullDockOptions = Invoke-TimedRestMethod `
     -Method Get `
     -Uri "$BaseUrl/api/options?mode=full_dock" `
     -Headers $Headers `
@@ -87,7 +111,7 @@ $PredictBody = @{
     policy = "balanced"
     action_limit = 10
 } | ConvertTo-Json
-$Prediction = Invoke-RestMethod `
+$Prediction = Invoke-TimedRestMethod `
     -Method Post `
     -Uri "$BaseUrl/api/predict" `
     -Headers $Headers `
@@ -118,7 +142,7 @@ $ExplainBody = @{
     policy = "balanced"
     action_limit = 10
 } | ConvertTo-Json
-$Explanation = Invoke-RestMethod `
+$Explanation = Invoke-TimedRestMethod `
     -Method Post `
     -Uri "$BaseUrl/api/explain" `
     -Headers $Headers `
@@ -144,7 +168,7 @@ $RevealBody = @{
     decision_time = [string]$Prediction.decision_time
     station_ids = $StationIds
 } | ConvertTo-Json -Depth 4
-$Reveal = Invoke-RestMethod `
+$Reveal = Invoke-TimedRestMethod `
     -Method Post `
     -Uri "$BaseUrl/api/reveal" `
     -Headers $Headers `
@@ -167,7 +191,7 @@ $FullDockPredictBody = @{
     policy = "balanced"
     action_limit = 10
 } | ConvertTo-Json
-$FullDockPrediction = Invoke-RestMethod `
+$FullDockPrediction = Invoke-TimedRestMethod `
     -Method Post `
     -Uri "$BaseUrl/api/predict" `
     -Headers $Headers `
@@ -203,7 +227,7 @@ $FullDockExplainBody = @{
     policy = "balanced"
     action_limit = 10
 } | ConvertTo-Json
-$FullDockExplanation = Invoke-RestMethod `
+$FullDockExplanation = Invoke-TimedRestMethod `
     -Method Post `
     -Uri "$BaseUrl/api/explain" `
     -Headers $Headers `
@@ -230,7 +254,7 @@ $FullDockRevealBody = @{
     decision_time = [string]$FullDockPrediction.decision_time
     station_ids = $FullDockStationIds
 } | ConvertTo-Json -Depth 4
-$FullDockReveal = Invoke-RestMethod `
+$FullDockReveal = Invoke-TimedRestMethod `
     -Method Post `
     -Uri "$BaseUrl/api/reveal" `
     -Headers $Headers `
@@ -273,7 +297,7 @@ if (-not [string]::IsNullOrWhiteSpace($Origin)) {
 
 if (-not [string]::IsNullOrWhiteSpace($LocalBaseUrl)) {
     $LocalBaseUrl = $LocalBaseUrl.TrimEnd("/")
-    $LocalPrediction = Invoke-RestMethod `
+    $LocalPrediction = Invoke-TimedRestMethod `
         -Method Post `
         -Uri "$LocalBaseUrl/api/predict" `
         -ContentType "application/json; charset=utf-8" `
@@ -294,7 +318,7 @@ if (-not [string]::IsNullOrWhiteSpace($LocalBaseUrl)) {
         }
     }
 
-    $LocalFullDockPrediction = Invoke-RestMethod `
+    $LocalFullDockPrediction = Invoke-TimedRestMethod `
         -Method Post `
         -Uri "$LocalBaseUrl/api/predict" `
         -ContentType "application/json; charset=utf-8" `

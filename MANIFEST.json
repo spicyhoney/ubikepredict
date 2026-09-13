@@ -13,8 +13,8 @@
     },
     {
       "path": ".gitignore",
-      "bytes": 416,
-      "sha256": "9e9354da9917dff1f27567fd31e4b1695817685182bbfbb323c91003619e07b4",
+      "bytes": 864,
+      "sha256": "5c7daa04f43cc452abeba5587fa831944a5661fbc4407bd1a59aba4924ade1f4",
       "purpose": "Excludes secrets, virtual environments, dependencies, raw CSV and old experiments."
     },
     {
@@ -115,8 +115,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 9812,
-      "sha256": "669f298a3f4c644dc93abe221e1faaf5ab06f28c9792de8460b79f2865e83b14",
+      "bytes": 3620,
+      "sha256": "14ec96398d6ba778e1819726425ae0a16edf49b85709fde0ebf5c96ee69eab38",
       "purpose": "Traditional Chinese setup, testing, CLI, data-boundary and AWS handoff guide."
     },
     {
@@ -133,8 +133,8 @@
     },
     {
       "path": "scripts/setup.ps1",
-      "bytes": 859,
-      "sha256": "03dfd5bf677e27aed8bce9cda97ab308e0c353de848b9ba5927a25a1ca71ceba",
+      "bytes": 2580,
+      "sha256": "e92f92ac05f2b821292dcc4b1f039687899588428ae18ff9d2b8ee404156641a",
       "purpose": "Creates a local Python environment and installs pinned dependencies."
     },
     {

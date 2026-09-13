@@ -14,6 +14,8 @@ import json
 import logging
 import math
 import os
+import time
+from datetime import datetime, timezone
 from typing import Any, Protocol
 
 
@@ -21,6 +23,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 SUMMARY_DISCLAIMER = "此為決策輔助，不是實際派車指令"
+_BEDROCK_CONNECT_TIMEOUT_CAP_SECONDS = 2.0
+_LAMBDA_RESPONSE_MARGIN_SECONDS = 2.0
 
 _STATION_FACT_FIELDS = (
     "station_id",
@@ -39,13 +43,17 @@ _STATION_FACT_FIELDS = (
 )
 _FACTOR_FIELDS = ("feature", "label", "value_display", "contribution", "direction")
 
-_SYSTEM_PROMPT = """你是YouBike營運摘要助理。你只能從使用者JSON內的SHAP因素選出最值得閱讀的項目，並遵守：
-1. 不得創造天氣、活動、捷運人流、需求量、因果關係或未提供的事實。
-2. 不得修改風險機率、門檻、排名、路線或模型因素；SHAP是原始分數貢獻，不是機率百分點。
-3. 不得下達派車指令，只能說明為何值得關注；資料不足時直接說資料不足。
-4. reason_features只能逐字複製輸入shap.factors中的feature，不可自行寫理由。
-5. 只能輸出一個JSON物件，不得加Markdown或前後文字。schema必須恰為：
-{"reason_features":["輸入中的feature"],"emphasis":"duration|recent_change|historical_pattern|capacity|other","disclaimer":"此為決策輔助，不是實際派車指令"}
+_SYSTEM_PROMPT = """You select SHAP feature IDs for a YouBike operational summary. Return ONLY a raw JSON object. The first character must be { and the last must be }. Do not use Markdown, backticks, commentary, or code fences.
+
+The object must have exactly these three keys:
+- reason_features: an array of 1 to 3 DIFFERENT strings. Copy each string EXACTLY from input shap.factors[].feature. Select the most relevant supplied factors; do not list more than three.
+- emphasis: ONE string chosen from this exact list: "duration", "recent_change", "historical_pattern", "capacity", "other". It is a category, NOT a feature ID. Do not join values with pipes. Use "other" if uncertain.
+- disclaimer: copy this exact string: "此為決策輔助，不是實際派車指令"
+
+For example, if the input contains the feature red_duration_capped_6, a valid response is:
+{"reason_features":["red_duration_capped_6"],"emphasis":"duration","disclaimer":"此為決策輔助，不是實際派車指令"}
+
+Use only the supplied facts. Do not infer weather, events, passenger demand, causal effects, or dispatch instructions. Never modify risk, threshold, rank, route, or SHAP factors. SHAP contributions explain raw model scores, not probability percentage points.
 """
 
 
@@ -62,8 +70,11 @@ class BedrockConfig:
     region: str | None = None
     timeout_seconds: float = 4.0
     max_tokens: int = 300
+    min_interval_seconds: float = 0.0
 
     def __post_init__(self) -> None:
+        if not 0 <= float(self.min_interval_seconds) <= 2:
+            raise ValueError("Bedrock min_interval_seconds must be between 0 and 2")
         if not 0.1 <= float(self.timeout_seconds) <= 20.0:
             raise ValueError("Bedrock timeout_seconds must be between 0.1 and 20")
         if not 64 <= int(self.max_tokens) <= 1024:
@@ -87,6 +98,7 @@ class BedrockConfig:
             ),
             timeout_seconds=float(os.environ.get("BEDROCK_TIMEOUT_SECONDS", "4")),
             max_tokens=int(os.environ.get("BEDROCK_MAX_TOKENS", "300")),
+            min_interval_seconds=float(os.environ.get("BEDROCK_MIN_INTERVAL_SECONDS", "0")),
         )
 
 
@@ -215,9 +227,9 @@ def _create_bedrock_client(config: BedrockConfig) -> ConverseClient:
 
     timeout = float(config.timeout_seconds)
     network_config = Config(
-        connect_timeout=min(timeout, 2.0),
+        connect_timeout=min(timeout, _BEDROCK_CONNECT_TIMEOUT_CAP_SECONDS),
         read_timeout=timeout,
-        retries={"max_attempts": 1, "mode": "standard"},
+        retries={"total_max_attempts": 1, "mode": "standard"},
     )
     return boto3.client(
         "bedrock-runtime",
@@ -362,10 +374,27 @@ class BedrockSummaryService:
         self.config = config or BedrockConfig.from_env()
         self._client = client
 
+    def _paced_converse(self, client: ConverseClient, **kwargs: Any) -> Mapping[str, Any]:
+        # With this Lambda's reserved concurrency=1, keep its execution slot
+        # through the interval, including failures and execution-env turnover.
+        # This does not limit other functions or other account consumers.
+        started = time.monotonic()
+        LOGGER.warning("Bedrock send start utc=%s model=%s", datetime.now(timezone.utc).isoformat(), self.config.model_id)
+        try:
+            response = client.converse(**kwargs)
+            LOGGER.warning("Bedrock send success request_id=%s", response.get("ResponseMetadata", {}).get("RequestId", "unknown"))
+            return response
+        finally:
+            hold = self.config.min_interval_seconds - (time.monotonic() - started)
+            if hold > 0:
+                time.sleep(hold)
+
     def summarize(
         self,
         station_facts: Mapping[str, Any],
         shap_explanation: Mapping[str, Any],
+        *,
+        remaining_time_seconds: float | None = None,
     ) -> dict[str, str]:
         if not self.config.enabled:
             return template_operational_summary(
@@ -376,12 +405,35 @@ class BedrockSummaryService:
                 station_facts, shap_explanation, fallback_reason="missing_model_id"
             )
 
+        if remaining_time_seconds is not None:
+            try:
+                remaining = float(remaining_time_seconds)
+            except (TypeError, ValueError):
+                remaining = 0.0
+            timeout = float(self.config.timeout_seconds)
+            required = (
+                min(timeout, _BEDROCK_CONNECT_TIMEOUT_CAP_SECONDS)
+                + max(timeout, self.config.min_interval_seconds)
+                + _LAMBDA_RESPONSE_MARGIN_SECONDS
+            )
+            if not math.isfinite(remaining) or remaining <= required:
+                LOGGER.warning(
+                    "Skipping Bedrock summary with %.3fs remaining; %.3fs required",
+                    remaining,
+                    required,
+                )
+                return template_operational_summary(
+                    station_facts,
+                    shap_explanation,
+                    fallback_reason="insufficient_lambda_time",
+                )
+
         payload = controlled_prompt_payload(station_facts, shap_explanation)
         try:
             if self._client is None:
                 self._client = _create_bedrock_client(self.config)
             client = self._client
-            response = client.converse(
+            response = self._paced_converse(client,
                 modelId=self.config.model_id,
                 system=[{"text": _SYSTEM_PROMPT}],
                 messages=[
@@ -445,10 +497,13 @@ def summarize_operationally(
     *,
     config: BedrockConfig | None = None,
     client: ConverseClient | None = None,
+    remaining_time_seconds: float | None = None,
 ) -> dict[str, str]:
     """Functional wrapper convenient for handlers and local callers."""
     return BedrockSummaryService(config=config, client=client).summarize(
-        station_facts, shap_explanation
+        station_facts,
+        shap_explanation,
+        remaining_time_seconds=remaining_time_seconds,
     )
 
 
@@ -457,12 +512,15 @@ def compose_explain_response(
     shap_explanation: Mapping[str, Any],
     *,
     service: BedrockSummaryService | None = None,
+    remaining_time_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Compose the stable API fragment used by local and Lambda handlers."""
     summary_service = service or BedrockSummaryService()
     return {
         "shap": dict(shap_explanation),
         "operational_summary": summary_service.summarize(
-            station_facts, shap_explanation
+            station_facts,
+            shap_explanation,
+            remaining_time_seconds=remaining_time_seconds,
         ),
     }

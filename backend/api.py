@@ -25,6 +25,7 @@ import pandas as pd
 
 from backend.bedrock_summary import BedrockSummaryService, compose_explain_response
 from backend.explanations import explain_row
+from backend.supply import supply_context
 from backend.inference import (
     AUDIT_ONLY_COLUMNS,
     JULY_START,
@@ -505,6 +506,7 @@ class DemoService:
             "candidates": candidates,
             "actions": route,
             "route_method": "最高風險站起點，再依相鄰距離串接；僅為調度關注順序示意。",
+            "supply": supply_context(_iso_taipei(decision_time), mode, [r["station_id"] for r in candidates]),
             "truth_revealed": False,
         }
 
@@ -551,7 +553,12 @@ class DemoService:
             ),
         }
 
-    def explain(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def explain(
+        self,
+        payload: dict[str, Any],
+        *,
+        remaining_time_provider: Any = None,
+    ) -> dict[str, Any]:
         """Explain one truth-free prediction with TreeSHAP and a safe summary."""
         mode = _mode(payload.get("mode"))
         engine = self.engines[mode]
@@ -642,10 +649,14 @@ class DemoService:
             "outcome_label": MODE_COPY[mode]["outcome"],
         }
         shap = explain_row(engine, model_row, mode=mode)
+        remaining_time_seconds = (
+            remaining_time_provider() if remaining_time_provider is not None else None
+        )
         response = compose_explain_response(
             station_facts,
             shap,
             service=self.summary_service,
+            remaining_time_seconds=remaining_time_seconds,
         )
         result = {
             "mode": mode,
@@ -661,7 +672,12 @@ class DemoService:
             **response,
         }
         fallback_reason = result["operational_summary"].get("fallback_reason")
-        cache_seconds = 15 if fallback_reason in {"bedrock_timeout", "bedrock_error"} else 900
+        short_cache_reasons = {
+            "bedrock_timeout",
+            "bedrock_error",
+            "insufficient_lambda_time",
+        }
+        cache_seconds = 15 if fallback_reason in short_cache_reasons else 900
         with self._explain_cache_lock:
             if len(self._explain_cache) >= 256:
                 self._explain_cache.pop(next(iter(self._explain_cache)))

@@ -145,11 +145,19 @@ function Remove-AllBucketVersions {
                     $Payload,
                     [System.Text.UTF8Encoding]::new($false)
                 )
-                Invoke-AwsCommand @(
+                $DeleteResult = Invoke-AwsJson @(
                     "s3api", "delete-objects",
                     "--bucket", $BucketName,
                     "--delete", "file://$TemporaryFile"
                 )
+                # S3 can return HTTP 200 / CLI exit 0 with per-object errors.
+                # Stop instead of repeatedly attempting the same denied versions.
+                if ($null -ne $DeleteResult.PSObject.Properties["Errors"] -and
+                    @($DeleteResult.Errors).Count -gt 0) {
+                    $ErrorCodes = @($DeleteResult.Errors | ForEach-Object { [string]$_.Code }) |
+                        Sort-Object -Unique
+                    throw "S3 refused to delete object versions ($($ErrorCodes -join ', ')); cleanup stopped."
+                }
             } finally {
                 Remove-Item -LiteralPath $TemporaryFile -Force -ErrorAction SilentlyContinue
             }

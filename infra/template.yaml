@@ -39,8 +39,8 @@ Parameters:
   BedrockRegion:
     Type: String
     Default: ""
-    Description: Optional cross-region Bedrock region. Empty means the Lambda execution region.
-    AllowedPattern: "^$|^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$"
+    Description: Organizer-approved Bedrock region. Empty means the Lambda execution region.
+    AllowedValues: ["", "us-east-1", "us-west-2"]
   BedrockTimeoutSeconds:
     Type: Number
     Default: 6
@@ -99,10 +99,8 @@ Rules:
         AssertDescription: BedrockModelId is required when BedrockEnabled is true.
       - Assert:
           Fn::Not:
-            - Fn::Equals:
-                - Fn::Join:
-                    - ","
-                    - Ref: BedrockModelResourceArns
+            - Fn::Contains:
+                - Ref: BedrockModelResourceArns
                 - "arn:aws:bedrock:us-east-1::foundation-model/disabled-placeholder"
         AssertDescription: BedrockModelResourceArns is required when BedrockEnabled is true.
 
@@ -226,6 +224,18 @@ Resources:
       Name: !Sub "${AWS::StackName}-frontend"
       Platform: WEB
       CustomRules:
+        - Source: /dispatch
+          Target: /dispatch/index.html
+          Status: "200"
+        - Source: /dispatch/
+          Target: /dispatch/index.html
+          Status: "200"
+        - Source: /dispatch/index.html
+          Target: /dispatch/index.html
+          Status: "200"
+        - Source: /dispatch.html
+          Target: /dispatch/index.html
+          Status: "200"
         - Source: '</^[^.]+$|\.(?!(css|gif|ico|jpg|jpeg|js|json|map|png|rsc|svg|ttf|txt|woff|woff2)$)([^.]+$)/>'
           Target: /index.html
           Status: "200"
@@ -363,6 +373,7 @@ Resources:
     Properties:
       PackageType: Image
       Role: !GetAtt PredictionExecutionRole.Arn
+      ReservedConcurrentExecutions: 1
       MemorySize: !Ref PredictionMemorySize
       ImageConfig:
         Command: [backend.lambda_handler.prediction_handler]
@@ -370,6 +381,7 @@ Resources:
         Variables:
           UBIKE_RUNTIME_BUCKET: !Ref RuntimeBucket
           BEDROCK_ENABLED: !Ref BedrockEnabled
+          BEDROCK_MIN_INTERVAL_SECONDS: "1.1"
           BEDROCK_MODEL_ID: !Ref BedrockModelId
           BEDROCK_REGION: !Ref BedrockRegion
           BEDROCK_TIMEOUT_SECONDS: !Sub "${BedrockTimeoutSeconds}"

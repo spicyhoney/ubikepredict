@@ -3,6 +3,10 @@ FROM public.ecr.aws/lambda/python:3.12
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+# The manylinux LightGBM wheel links to libgomp.so.1, which is absent from
+# the minimal Amazon Linux 2023 Lambda base image.
+RUN dnf install -y libgomp && dnf clean all
+
 COPY requirements.txt requirements-aws.txt ${LAMBDA_TASK_ROOT}/
 RUN python -m pip install --no-cache-dir \
       --requirement ${LAMBDA_TASK_ROOT}/requirements-aws.txt \
@@ -10,6 +14,9 @@ RUN python -m pip install --no-cache-dir \
 
 COPY backend ${LAMBDA_TASK_ROOT}/backend
 COPY MANIFEST.json ${LAMBDA_TASK_ROOT}/MANIFEST.json
+
+# Package installation alone does not prove native shared libraries load.
+RUN python -c "import lightgbm, numpy, pandas, pyarrow; import backend.lambda_handler"
 
 # SAM overrides this command per function. Keeping a valid default makes the
 # image runnable directly for prediction-handler smoke tests.

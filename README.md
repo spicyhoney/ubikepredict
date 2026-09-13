@@ -1,133 +1,57 @@
-# YouBike 30 分鐘持續失衡風險：可攜推論包
+# YouBike 缺車站點的持續風險預測與派車規劃
 
-這個 Repository 已包含在另一台 Windows 筆電重現 Demo 所需的互動前端、本機 API、凍結模型、六月特徵、站點座標、門檻、機率校正設定及核對資料。正常 Demo 不需要 1～6 月原始 CSV，也不需要重新訓練。
+針對「目前已無車可借」的站點，預測 30 分鐘後是否仍缺車，再以供車庫存、道路時間和運補車載量安排取送。
 
-## 作品現在能做什麼
+- [預警系統](https://main.d2wv8lmkdla1vb.amplifyapp.com/)
+- [派車系統](https://main.d2wv8lmkdla1vb.amplifyapp.com/dispatch/)
+- [操作影片（1:59）](https://youtu.be/Mq1oi1dxpl4)
 
-官方地圖已能顯示當下失衡；本作品以「當下0車，預測30分鐘後是否仍0車」為主要模式，並增加「當下0空位，預測30分鐘後是否仍0空位」的 `full_dock` 輔助模式。互動 Demo 會：
+## 功能與架構
 
-- 以真實六月歷史情境執行兩個已凍結 LightGBM 的推論，不使用前端寫死分數。
-- 顯示主模式當下0車或輔助模式當下0空位候選，並標出歷史長度不足而未評分的站。
-- 先套凍結門檻，再取最多10站的有限行動清單；不會硬湊名額。
-- 依風險與相鄰距離產生巡補順序示意，並清楚標示它不是實際派車最佳化。
-- 按下揭曉後才讀六月答案，逐站顯示「仍失衡／已恢復」及本案例 Precision。
-- 點選可評分站點可看 LightGBM SHAP 推升／降低風險因素；本機以固定範本摘要，AWS 模式才會在實際成功呼叫後標示 Amazon Bedrock。
-- 在支援 WebMCP 的瀏覽器中，AI 助理也能操作同一套「執行預測／揭曉結果」流程。
+預警頁呈現最多 10 個優先站點、LightGBM 風險、SHAP 原因，以及 30 分鐘後的歷史答案。派車頁可選 1–5 台運補車、候選站數上限、載量、作業時間與補車／保留量，並可單獨查看各車路線。
 
-API 契約見 [docs/api-contract.md](docs/api-contract.md)，一分鐘展示流程見 [docs/demo-runbook.md](docs/demo-runbook.md)。
+預設先套警示門檻，再取 Top 10／20／30 候選；不為湊滿名額加入低風險站。風險優先 Greedy 為目標站選擇可行車輛及供車點，各車行車加作業時間不超過 30 分鐘。全車隊共用供車庫存，避免重複分配；同車可一次取車後連續送至多站。
 
-## 新筆電／新對話從這裡接手
+| 元件 | 用途 |
+| --- | --- |
+| Amplify、React／Vinext | 網頁與瀏覽器端派車演算法 |
+| API Gateway、Lambda | LightGBM／SHAP 推論；歷史揭曉獨立處理 |
+| 私有 S3 | 模型、推論輸入與揭曉資料分開保存 |
+| Bedrock | 將既有模型原因整理成摘要，不決定風險或路線 |
+| Leaflet／OpenStreetMap、OSRM | 地圖、道路路徑與行車時間估計 |
 
-- [專案完整交接](docs/project-handoff.md)：預測問題、資料切分、68項凍結特徵、模型資產、已做實驗、六月結果、不可更動原則及新對話提示。
-- [AWS 現場交接](docs/aws-handoff.md)：S3、Lambda、API Gateway、IAM、SHAP、Bedrock、前端接法及逐項驗收清單。
-- [模型卡](docs/model-card.md)：凍結模型、Platt公式、門檻與限制。
-- [下一輪 Evaluation 結果](docs/EVALUATION_RESULTS_REVIEW_v2.md)：R2-0～R2-3 的來源補件、特徵消融、no-station 重現與長事件混合政策；R2-4 因沒有真正未見月份而未執行。
+## 公開版本的範圍
 
-新對話不得只看前端畫面猜測專案狀態；必須先讀上述文件並執行 smoke test。本專案現場只搬移已凍結模型做推論，不重新訓練，也不得用六月重新調參。
+本版提供產品原始碼、合成資料的演算法測試、AWS 範本及 Kiro 規格。**不附主辦資料、站點車數快照、模型權重、特徵快取、道路矩陣、私有部署設定或金鑰。** 下載後可建置前端並執行公開測試；完整歷史回放與派車 Demo 需另備經授權的資產，不能只靠這份原始碼離線重現。
 
-## 從資料分析走到最終問題
+資產路徑與驗證方式見 [私有資產與資料界線](docs/private-assets.md)。舊研究報表、錄影、簡報、機器專用交接，以及已不使用的單車逐站操作元件已從新版樹狀目錄排除；本機原檔保留。
 
-專案不是先選模型再找用途，而是先分析失衡時段、事件持續時間、重要站定義與既有介入痕跡，再逐步測試逐快照風險、門檻、Top-K、加權標籤、多時點、存活模型、共識與動態重評估。完整實驗與採用／不採用理由請看 [完整實驗總表與資料證據](EXPERIMENTS_AND_DATA_SUMMARY.md)，11 份 Excel 證據與各階段決策整理在 [分析歷程](analysis/README.md)。這些工作簿保留探索過程；目前實作與最終數字仍以本頁及 [模型卡](docs/model-card.md) 為準。
+這次採一般提交更新，沒有改寫既有 Git 歷史；舊提交中原有的資料與模型仍可能被存取。這份原始碼整理不代表已完成歷史資料清除。
 
-## 第一次使用（Windows PowerShell）
+## 開發與檢查
 
-先安裝 64-bit Python 3.12、Node.js 22.13 以上與 Git。Clone 後在專案根目錄執行：
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\scripts\setup.ps1
-.\scripts\setup-frontend.ps1
-.\scripts\smoke-test.ps1
-.\scripts\start-local-app.ps1
-```
-
-瀏覽器開啟 `http://localhost:3000` 即可操作。最後一個指令會同時啟動前端與本機模型服務，按 `Ctrl+C` 會一起停止。
-
-Smoke test 會驗證模型與資料檔雜湊、門檻兩側 golden cases、未知站點、六月完整 parity，以及本機 API、Lambda adapter、S3 雜湊防護、SHAP 與 Bedrock fallback。測試項目會隨實作擴充，請以最終實跑全套通過為準。
-
-只想在終端查看模型時，仍可使用原本的 `scripts\run-demo.ps1`。
-
-## 查詢指定時間、行政區與 Top-N
+需求：64-bit Python 3.12、Node.js 22.13 以上、pnpm 11.19.0。
 
 ```powershell
-.\scripts\run-demo.ps1 -Mode empty -Datetime "2026-06-23 19:30" -District "板橋區" -Policy balanced -Top 10
-
-# 滿柱輔助模式
-.\scripts\run-demo.ps1 -Mode full_dock -Datetime "2026-06-25 08:00" -District "板橋區" -Policy balanced -Top 10
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-aws.txt
+.\.venv\Scripts\python.exe scripts/check-public-source.py
+.\.venv\Scripts\python.exe scripts/test-public-source.py
+cd frontend
+pnpm install --frozen-lockfile
+pnpm test
+pnpm run lint
+pnpm exec tsc --noEmit
+$env:NEXT_PUBLIC_API_BASE_URL = "https://your-api.example/prod"
+pnpm run build
 ```
 
-模式可選 `empty` 與 `full_dock`，預設仍為缺車主模式 `empty`。兩種模式的凍結門檻不同：
+`pnpm dev` 啟動前端；將 `frontend/.env.example` 複製為 `.env.local` 並填入你有權使用的 API 位址。`example` 位址只用於建置驗證，不能提供預測。完整後端與供車功能的啟動步驟見資產文件；不要將機密放入 `NEXT_PUBLIC_*`。
 
-- `empty`：`balanced` 為 56.681205%，`strict` 為 65.177727%。
-- `full_dock`：`balanced` 為 42.059604%，`strict` 為 48.107435%。
-- `all`：不先套門檻，直接列出該篩選範圍風險最高的站點。
+公開 CI 驗證原始碼界線、合成資料測試、前端型別／lint／建置、SAM 及容器建置；不持有競賽資料或 AWS 部署憑證，也不自動部署。
 
-也可直接呼叫 Python，輸出 JSON 供離線檢視或其他工具使用；互動前端本身呼叫的是 `/api/*`，不是這個 CLI 檔案：
+## 模擬限制
 
-```powershell
-.\.venv\Scripts\python.exe .\backend\inference.py --mode empty --datetime "2026-06-23 19:30" --district "板橋區" --policy all --top 10 --format json --output .\demo-output.json
-```
+展示以 6/29 09:00 的車數為起點；庫存隨模擬取送更新，不演化民眾借還。每次送站預設另加 3 分鐘取裝卸作業，與道路行車時間分開計算。道路估時不含即時交通、車型限制或車庫往返。兩個半小時快照不能證明中間從未恢復；歷史命中率也不等於實際調度的因果改善。
 
-## 資料與模型分層
-
-```text
-model/lgbm_full.txt
-  缺車主模式的凍結 LightGBM。
-model/lgbm_full_dock.txt
-  滿柱輔助模式的凍結 LightGBM；兩者都只做推論。
-config/final_policy_freeze_before_may.json
-config/final_policy_freeze_full_dock_before_may.json
-  兩種模式各自的 68 欄順序、Platt 參數與兩個門檻。
-config/protocol_frozen_before_june.json
-config/protocol_full_dock_frozen_before_june.json
-  兩種模式各自的類別 schema 與實驗協議。
-data/source/dynamic_red_empty_2026_06.parquet
-  六月封存特徵快取；含 92,882 筆候選快照。
-data/source/dynamic_red_empty_2026_06_input.parquet
-  前端 API 專用輸入；已物理移除答案與未來資訊欄位。
-data/reference/june_all_eligible_decisions.parquet
-  27,962 筆一次性六月核對結果，只供測試與揭曉。
-data/source/dynamic_red_full_2026_06.parquet
-data/source/dynamic_red_full_2026_06_input.parquet
-data/reference/june_full_dock_all_eligible_decisions.parquet
-  滿柱輔助模式的封存快取、truth-free 輸入與 3,776 筆核對結果。
-data/stations/dim_station.csv
-  站名、行政區、經緯度與容量範圍。
-```
-
-`MANIFEST.json` 記錄核心推論資產的大小、SHA256 與用途；測試會在啟動前逐一核對，避免搬電腦時遺漏或拿錯版本。前端套件版本則由 `frontend/pnpm-lock.yaml` 固定。
-
-## 推論公式與防洩漏
-
-兩種模式的流程都固定為：對應的六月 truth-free 特徵 → 依各自 freeze 的 68 欄與順序建矩陣 → LightGBM `raw_score=True` → 各自的 Platt sigmoid → 各自的凍結門檻。
-
-六月 source 為了離線稽核仍保留 `y_same_30` 與 `future_30_*`。推論程式採「特徵白名單」，只選 freeze JSON 列出的 68 欄；答案、未來資訊及 reference 絕不會傳入模型。部署前端時也不要把整個 `data/` 當公開靜態目錄。
-
-## 實驗時間界線
-
-- 2026 年 1～3 月：模型訓練。
-- 2026 年 4 月：機率校正、門檻選擇及 gate。
-- 2026 年 5 月：凍結後的探索性確認，未用於重訓或選門檻。
-- 2026 年 6 月：沒有參與訓練、機率校正或門檻選擇；用於凍結結果核對與 Demo 回放。但六月特徵／結果快取已在專案過程中存在，特別是 `full_dock` 只能稱為凍結後回溯核對，不應包裝成全新、從未開封的前瞻盲測。
-
-## GitHub 應放與不應放的內容
-
-`full_dock` 的六月 3,776 筆回溯核對：平衡版 Precision 47.71%、Recall 17.20%；嚴格證據版 Precision 56.79%、Recall 10.14%。六月未參與訓練、校正或門檻選擇，但因快取已在專案過程中存在，這是凍結後歷史回溯，不宣稱為全新盲測。
-
-本專案內的前後端程式、兩種凍結模型與對應 config／Parquet、站點 CSV，以及 `analysis/reports/` 中挑選過的彙整報告都應提交。不要提交 `.venv`、`node_modules`、AWS 金鑰、真正的 `.env`、大型原始 CSV、`tmp` 或未整理的舊實驗輸出。比賽前請在實際筆電全新 Clone 一次並跑 smoke test，另將 Repository ZIP 備份到 OneDrive。
-
-## AWS-ready 狀態：程式已備妥，尚未真正上雲
-
-未有 AWS 憑證時，本包仍可離線完整推論、解釋與操作前端。目前已寫好並可本機測試的是：
-
-- 靜態前端封裝與 Amplify manual deployment 流程。
-- API Gateway HTTP API、兩個 Lambda 容器、私有 runtime／truth S3 與最小權限 IAM 的 SAM 模板。
-- S3 冷啟動下載、固定檔名／大小／SHA256 核對，以及 API Gateway v2 Lambda handlers；`empty` 與 `full_dock` 共用同一架構、端點與部署腳本。
-- LightGBM `pred_contrib=True` 的 SHAP 原始分數貢獻、中文欄位名與受控 Bedrock 摘要；無權限、關閉、逾時或輸出不合規時會改用明確標示的固定範本。
-- 部署、前端封裝、雲端驗收、清理腳本與 GitHub Actions CI。
-
-目前沒有比賽 AWS 金鑰，因此尚未建立任何真實 AWS 資源、未在實際 Region 呼叫 Bedrock，也未完成公開 HTTPS 網址的 cloud parity 驗收。不可將「程式與部署骨架完成」報告成「AWS／Bedrock 已部署成功」。
-
-比賽主路徑是「Amplify manual static 公開前端 → API Gateway HTTP API → 兩個權限分離的 Lambda 容器 → 私有 S3；Prediction Lambda 另呼叫 Bedrock 整理 SHAP」。Prediction role 無權讀取 truth bucket，但 `reveal` 是為了演示回放而公開的 API，不能聲稱答案「外部完全取得不到」。
-
-現場只應剩下：取得短期 AWS 憑證，確認 Region 與 Bedrock model／inference profile 存取權，執行同一支 `deploy-aws.ps1`，再完成兩種模式的腳本與人工雲端驗收。不需現場重訓任一模型。腳本會核對固定 API 案例、SHAP、Bedrock（啟用時）、Amplify 頁面與 CORS；IAM 的 truth `AccessDenied`、throttle、跨裝置操作及可選的 cloud/local parity 仍需依清單驗證。完整指令與 Definition of Done 見 [AWS 現場交接](docs/aws-handoff.md)。
+[模型卡](docs/model-card.md) · [API 契約](docs/api-contract.md) · [目前狀態](docs/STATE.md)
