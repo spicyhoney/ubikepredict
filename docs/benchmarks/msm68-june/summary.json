@@ -1,0 +1,559 @@
+{
+  "benchmark": "New Taipei YouBike: zero bikes now and at the next 30-minute snapshot",
+  "schema_version": 1,
+  "evaluation_month": "2026-06",
+  "cohort": {
+    "days": 30,
+    "decision_times": 420,
+    "station_observations": 27962,
+    "positive": 11921,
+    "features": 68,
+    "empty_origins_training": 225086,
+    "april_calibration_rows": 13992,
+    "additional_available_origins_for_joint_fit": 316147
+  },
+  "intervals": {
+    "unit": "calendar day",
+    "method": "paired percentile bootstrap with replacement",
+    "replicates": 10000,
+    "seed": 20261124,
+    "coverage": 0.95
+  },
+  "models": {
+    "lightgbm": {
+      "top3": {
+        "hits": 870,
+        "selected": 1260
+      },
+      "top10": {
+        "hits": 2574,
+        "selected": 4152
+      },
+      "brier": 0.2285175969932574,
+      "mean_probability": 0.4191423981630954,
+      "ece10": 0.0080986070231442,
+      "calibration_bins": [
+        {
+          "lower": 0,
+          "upper": 0.1,
+          "n": 56,
+          "positive": 7,
+          "mean_probability": 0.08433777998600685,
+          "sum_squared_error": 6.1906050999194475,
+          "observed_rate_ci95": [
+            0.034482758620689655,
+            0.23809523809523808
+          ]
+        },
+        {
+          "lower": 0.1,
+          "upper": 0.2,
+          "n": 1143,
+          "positive": 199,
+          "mean_probability": 0.16033431186893998,
+          "sum_squared_error": 164.4924737388885,
+          "observed_rate_ci95": [
+            0.15022884900875266,
+            0.19695899984640028
+          ]
+        },
+        {
+          "lower": 0.2,
+          "upper": 0.3,
+          "n": 4195,
+          "positive": 1205,
+          "mean_probability": 0.2586875188300948,
+          "sum_squared_error": 858.5902301269443,
+          "observed_rate_ci95": [
+            0.26860810571800603,
+            0.3067517333374546
+          ]
+        },
+        {
+          "lower": 0.3,
+          "upper": 0.4,
+          "n": 7285,
+          "positive": 2571,
+          "mean_probability": 0.3525054736749391,
+          "sum_squared_error": 1656.8415794800376,
+          "observed_rate_ci95": [
+            0.3377992001808135,
+            0.3679661206549487
+          ]
+        },
+        {
+          "lower": 0.4,
+          "upper": 0.5,
+          "n": 7840,
+          "positive": 3547,
+          "mean_probability": 0.4491255810712369,
+          "sum_squared_error": 1935.2630020116553,
+          "observed_rate_ci95": [
+            0.4408317031664259,
+            0.463936931958243
+          ]
+        },
+        {
+          "lower": 0.5,
+          "upper": 0.6,
+          "n": 4833,
+          "positive": 2630,
+          "mean_probability": 0.5439040919724593,
+          "sum_squared_error": 1192.1507193045152,
+          "observed_rate_ci95": [
+            0.5286160505428693,
+            0.5619870055920032
+          ]
+        },
+        {
+          "lower": 0.6,
+          "upper": 0.7,
+          "n": 2024,
+          "positive": 1338,
+          "mean_probability": 0.6384825397562603,
+          "sum_squared_error": 458.06883423541,
+          "observed_rate_ci95": [
+            0.6399069875084956,
+            0.6853747989727351
+          ]
+        },
+        {
+          "lower": 0.7,
+          "upper": 0.8,
+          "n": 530,
+          "positive": 384,
+          "mean_probability": 0.7374582860829695,
+          "sum_squared_error": 105.96421400226622,
+          "observed_rate_ci95": [
+            0.6927707896163912,
+            0.7582160759528155
+          ]
+        },
+        {
+          "lower": 0.8,
+          "upper": 0.9,
+          "n": 56,
+          "positive": 40,
+          "mean_probability": 0.8197071765150342,
+          "sum_squared_error": 12.24738912582702,
+          "observed_rate_ci95": [
+            0.574468085106383,
+            0.8275862068965517
+          ]
+        },
+        {
+          "lower": 0.9,
+          "upper": 1,
+          "n": 0,
+          "positive": 0,
+          "mean_probability": null,
+          "sum_squared_error": 0,
+          "observed_rate_ci95": null
+        }
+      ]
+    },
+    "msm_matched": {
+      "top3": {
+        "hits": 932,
+        "selected": 1260
+      },
+      "top10": {
+        "hits": 2594,
+        "selected": 4152
+      },
+      "brier": 0.22912182582406174,
+      "mean_probability": 0.42334646157280603,
+      "ece10": 0.007621495536852327,
+      "calibration_bins": [
+        {
+          "lower": 0,
+          "upper": 0.1,
+          "n": 54,
+          "positive": 8,
+          "mean_probability": 0.07791847987445416,
+          "sum_squared_error": 7.065712206030573,
+          "observed_rate_ci95": [
+            0.05660377358490566,
+            0.2608695652173913
+          ]
+        },
+        {
+          "lower": 0.1,
+          "upper": 0.2,
+          "n": 977,
+          "positive": 179,
+          "mean_probability": 0.16592572345002768,
+          "sum_squared_error": 146.1912733410727,
+          "observed_rate_ci95": [
+            0.15702429432666587,
+            0.20938628158844766
+          ]
+        },
+        {
+          "lower": 0.2,
+          "upper": 0.3,
+          "n": 3839,
+          "positive": 1071,
+          "mean_probability": 0.2589039632657072,
+          "sum_squared_error": 769.2335328296971,
+          "observed_rate_ci95": [
+            0.2592494861478215,
+            0.30081764280935114
+          ]
+        },
+        {
+          "lower": 0.3,
+          "upper": 0.4,
+          "n": 7190,
+          "positive": 2536,
+          "mean_probability": 0.3533745810078646,
+          "sum_squared_error": 1633.8946092803321,
+          "observed_rate_ci95": [
+            0.33784283594455855,
+            0.36754825788114226
+          ]
+        },
+        {
+          "lower": 0.4,
+          "upper": 0.5,
+          "n": 8263,
+          "positive": 3711,
+          "mean_probability": 0.448968780112154,
+          "sum_squared_error": 2039.4557230828254,
+          "observed_rate_ci95": [
+            0.4363895200366796,
+            0.4610993083902416
+          ]
+        },
+        {
+          "lower": 0.5,
+          "upper": 0.6,
+          "n": 5315,
+          "positive": 2827,
+          "mean_probability": 0.5428201751112377,
+          "sum_squared_error": 1321.2811532272822,
+          "observed_rate_ci95": [
+            0.5173407900141254,
+            0.5474346917529234
+          ]
+        },
+        {
+          "lower": 0.6,
+          "upper": 0.7,
+          "n": 1822,
+          "positive": 1181,
+          "mean_probability": 0.6396265234695963,
+          "sum_squared_error": 411.06566045305595,
+          "observed_rate_ci95": [
+            0.6265815228561411,
+            0.6688531117082033
+          ]
+        },
+        {
+          "lower": 0.7,
+          "upper": 0.8,
+          "n": 464,
+          "positive": 379,
+          "mean_probability": 0.7441225207314409,
+          "sum_squared_error": 71.54157211153915,
+          "observed_rate_ci95": [
+            0.7714285714285715,
+            0.8542104847492289
+          ]
+        },
+        {
+          "lower": 0.8,
+          "upper": 0.9,
+          "n": 38,
+          "positive": 29,
+          "mean_probability": 0.8160668470357594,
+          "sum_squared_error": 6.9752571605786535,
+          "observed_rate_ci95": [
+            0.6571428571428571,
+            0.8709677419354839
+          ]
+        },
+        {
+          "lower": 0.9,
+          "upper": 1,
+          "n": 0,
+          "positive": 0,
+          "mean_probability": null,
+          "sum_squared_error": 0,
+          "observed_rate_ci95": null
+        }
+      ]
+    },
+    "msm_both_origins": {
+      "top3": {
+        "hits": 732,
+        "selected": 1260
+      },
+      "top10": {
+        "hits": 2306,
+        "selected": 4152
+      },
+      "brier": 0.23826876626298407,
+      "mean_probability": 0.41442884689940485,
+      "ece10": 0.015147170783081495,
+      "calibration_bins": [
+        {
+          "lower": 0,
+          "upper": 0.1,
+          "n": 370,
+          "positive": 160,
+          "mean_probability": 0.05241278803630455,
+          "sum_squared_error": 144.0309799200959,
+          "observed_rate_ci95": [
+            0.39195907491347226,
+            0.4728280948811308
+          ]
+        },
+        {
+          "lower": 0.1,
+          "upper": 0.2,
+          "n": 271,
+          "positive": 67,
+          "mean_probability": 0.1671478148151148,
+          "sum_squared_error": 53.086221920309086,
+          "observed_rate_ci95": [
+            0.20512820512820512,
+            0.29098513579642765
+          ]
+        },
+        {
+          "lower": 0.2,
+          "upper": 0.3,
+          "n": 2841,
+          "positive": 765,
+          "mean_probability": 0.26393366396028534,
+          "sum_squared_error": 559.0500663183949,
+          "observed_rate_ci95": [
+            0.24971735083766045,
+            0.29000385936109707
+          ]
+        },
+        {
+          "lower": 0.3,
+          "upper": 0.4,
+          "n": 8422,
+          "positive": 3002,
+          "mean_probability": 0.35515648851313125,
+          "sum_squared_error": 1922.5418433547122,
+          "observed_rate_ci95": [
+            0.34426953289824386,
+            0.36863148898619524
+          ]
+        },
+        {
+          "lower": 0.4,
+          "upper": 0.5,
+          "n": 10373,
+          "positive": 4820,
+          "mean_probability": 0.44844185192399044,
+          "sum_squared_error": 2571.5654512077813,
+          "observed_rate_ci95": [
+            0.45436928438895763,
+            0.474648918288491
+          ]
+        },
+        {
+          "lower": 0.5,
+          "upper": 0.6,
+          "n": 4968,
+          "positive": 2694,
+          "mean_probability": 0.5379461571694188,
+          "sum_squared_error": 1232.1614910931735,
+          "observed_rate_ci95": [
+            0.5254553734448644,
+            0.5586249611027733
+          ]
+        },
+        {
+          "lower": 0.6,
+          "upper": 0.7,
+          "n": 670,
+          "positive": 389,
+          "mean_probability": 0.6329809551808372,
+          "sum_squared_error": 165.95500191691036,
+          "observed_rate_ci95": [
+            0.5450144650060261,
+            0.6132517670653264
+          ]
+        },
+        {
+          "lower": 0.7,
+          "upper": 0.8,
+          "n": 47,
+          "positive": 24,
+          "mean_probability": 0.7298949627166099,
+          "sum_squared_error": 14.080186514182621,
+          "observed_rate_ci95": [
+            0.35555555555555557,
+            0.6470588235294118
+          ]
+        },
+        {
+          "lower": 0.8,
+          "upper": 0.9,
+          "n": 0,
+          "positive": 0,
+          "mean_probability": null,
+          "sum_squared_error": 0,
+          "observed_rate_ci95": null
+        },
+        {
+          "lower": 0.9,
+          "upper": 1,
+          "n": 0,
+          "positive": 0,
+          "mean_probability": null,
+          "sum_squared_error": 0,
+          "observed_rate_ci95": null
+        }
+      ]
+    }
+  },
+  "paired_differences_vs_lightgbm": [
+    {
+      "model": "msm_matched",
+      "metric": "P@3",
+      "difference": 0.049206349206349205,
+      "ci95": [
+        0.011904761904761904,
+        0.08492063492063492
+      ]
+    },
+    {
+      "model": "msm_matched",
+      "metric": "P@10",
+      "difference": 0.004816955684007707,
+      "ci95": [
+        -0.007245021393740914,
+        0.01630570257836077
+      ]
+    },
+    {
+      "model": "msm_matched",
+      "metric": "Brier",
+      "difference": 0.0006042288308044207,
+      "ci95": [
+        -0.0005229677719030461,
+        0.0016939250067641877
+      ]
+    },
+    {
+      "model": "msm_both_origins",
+      "metric": "P@3",
+      "difference": -0.10952380952380952,
+      "ci95": [
+        -0.1357142857142857,
+        -0.08095238095238096
+      ]
+    },
+    {
+      "model": "msm_both_origins",
+      "metric": "P@10",
+      "difference": -0.06454720616570328,
+      "ci95": [
+        -0.08021255946538973,
+        -0.04984244821411701
+      ]
+    },
+    {
+      "model": "msm_both_origins",
+      "metric": "Brier",
+      "difference": 0.009751169269726976,
+      "ci95": [
+        0.008231979647890937,
+        0.011398062704428629
+      ]
+    }
+  ],
+  "selection_overlap_vs_lightgbm": [
+    {
+      "model": "msm_matched",
+      "k": 3,
+      "selection": "both",
+      "n": 617,
+      "hits": 453
+    },
+    {
+      "model": "msm_matched",
+      "k": 3,
+      "selection": "LightGBM only",
+      "n": 643,
+      "hits": 417
+    },
+    {
+      "model": "msm_matched",
+      "k": 3,
+      "selection": "MSM only",
+      "n": 643,
+      "hits": 479
+    },
+    {
+      "model": "msm_both_origins",
+      "k": 3,
+      "selection": "both",
+      "n": 504,
+      "hits": 335
+    },
+    {
+      "model": "msm_both_origins",
+      "k": 3,
+      "selection": "LightGBM only",
+      "n": 756,
+      "hits": 535
+    },
+    {
+      "model": "msm_both_origins",
+      "k": 3,
+      "selection": "MSM only",
+      "n": 756,
+      "hits": 397
+    },
+    {
+      "model": "msm_matched",
+      "k": 10,
+      "selection": "both",
+      "n": 3017,
+      "hits": 1937
+    },
+    {
+      "model": "msm_matched",
+      "k": 10,
+      "selection": "LightGBM only",
+      "n": 1135,
+      "hits": 637
+    },
+    {
+      "model": "msm_matched",
+      "k": 10,
+      "selection": "MSM only",
+      "n": 1135,
+      "hits": 657
+    },
+    {
+      "model": "msm_both_origins",
+      "k": 10,
+      "selection": "both",
+      "n": 2530,
+      "hits": 1544
+    },
+    {
+      "model": "msm_both_origins",
+      "k": 10,
+      "selection": "LightGBM only",
+      "n": 1622,
+      "hits": 1030
+    },
+    {
+      "model": "msm_both_origins",
+      "k": 10,
+      "selection": "MSM only",
+      "n": 1622,
+      "hits": 762
+    }
+  ]
+}
